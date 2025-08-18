@@ -1,10 +1,18 @@
 {
   "version": 2,
-  "functions": {
-    "server/index.js": {
-      "runtime": "nodejs18.x"
+  "builds": [
+    {
+      "src": "server/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "client/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
     }
-  },
+  ],
   "routes": [
     {
       "src": "/api/(.*)",
@@ -12,10 +20,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/client/$1"
     }
-  ],
-  "buildCommand": "cd client && npm run build",
-  "outputDirectory": "client/build",
-  "installCommand": "npm install && cd client && npm install && cd ../server && npm install"
+  ]
 }
