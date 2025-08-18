@@ -8,10 +8,14 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const path = require('path');
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../client/build')));
 
 // Database setup
 const db = new sqlite3.Database('./azik.db');
@@ -624,6 +628,11 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
   
   const key = `${province}-${district}`;
   res.json(neighborhoods[key] || []);
+});
+
+// Catch all handler: send back React's index.html file for any non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build/index.html'));
 });
 
 app.listen(PORT, () => {
