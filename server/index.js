@@ -61,10 +61,32 @@ db.serialize(() => {
     FOREIGN KEY (listingId) REFERENCES food_listings (id),
     FOREIGN KEY (offererId) REFERENCES users (id)
   )`);
+
+  // Notifications table
+  db.run(`CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    isRead BOOLEAN DEFAULT 0,
+    relatedId TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users (id)
+  )`);
 });
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'azik-secret-key';
+
+// Helper function to create notifications
+const createNotification = (userId, type, title, message, relatedId = null) => {
+  const notificationId = uuidv4();
+  db.run(
+    'INSERT INTO notifications (id, userId, type, title, message, relatedId) VALUES (?, ?, ?, ?, ?, ?)',
+    [notificationId, userId, type, title, message, relatedId]
+  );
+};
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -336,6 +358,16 @@ app.post('/api/offers', authenticateToken, (req, res) => {
           if (err) {
             return res.status(500).json({ error: 'Teklif oluşturulamadı' });
           }
+          
+          // Create notification for listing owner
+          createNotification(
+            listing.userId,
+            'new_offer',
+            'Yeni Teklif',
+            `${req.user.firstName} ${req.user.lastName} ilanınıza teklif verdi`,
+            offerId
+          );
+          
           res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
         }
       );
@@ -382,8 +414,26 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
             if (!err && offerer) {
               // In a real app, you'd send SMS here
               console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${req.user.phone}`);
+              
+              // Create notification for offerer
+              createNotification(
+                offer.offererId,
+                'offer_accepted',
+                'Teklif Kabul Edildi',
+                `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${req.user.phone}`,
+                offerId
+              );
             }
           });
+        } else {
+          // Create notification for rejected offer
+          createNotification(
+            offer.offererId,
+            'offer_rejected',
+            'Teklif Reddedildi',
+            `[${listing.foodName}] teklifiniz reddedildi`,
+            offerId
+          );
         }
 
         res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
@@ -628,6 +678,50 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
   
   const key = `${province}-${district}`;
   res.json(neighborhoods[key] || []);
+});
+
+// Get user notifications
+app.get('/api/notifications', authenticateToken, (req, res) => {
+  db.all(
+    'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
+    [req.user.id],
+    (err, notifications) => {
+      if (err) {
+        return res.status(500).json({ error: 'Bildirimler yüklenemedi' });
+      }
+      res.json(notifications);
+    }
+  );
+});
+
+// Mark notification as read
+app.put('/api/notifications/:notificationId/read', authenticateToken, (req, res) => {
+  const { notificationId } = req.params;
+  
+  db.run(
+    'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
+    [notificationId, req.user.id],
+    function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Bildirim güncellenemedi' });
+      }
+      res.json({ message: 'Bildirim okundu olarak işaretlendi' });
+    }
+  );
+});
+
+// Get unread notification count
+app.get('/api/notifications/unread-count', authenticateToken, (req, res) => {
+  db.get(
+    'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = 0',
+    [req.user.id],
+    (err, result) => {
+      if (err) {
+        return res.status(500).json({ error: 'Bildirim sayısı alınamadı' });
+      }
+      res.json({ count: result.count });
+    }
+  );
 });
 
 // Catch all handler: send back React's index.html file for any non-API routes
