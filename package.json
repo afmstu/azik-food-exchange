@@ -26,5 +26,6 @@
     "react-scripts": "5.0.1"
   },
   "build": "cd client && npm run build",
-  "vercel-build": "npm run install-all && npm run build"
+  "vercel-build": "npm run install-all && npm run build",
+  "homepage": "."
 }
