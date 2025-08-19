@@ -444,7 +444,15 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
 
 // Get user's listings
 app.get('/api/my-listings', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM food_listings WHERE userId = ? ORDER BY createdAt DESC', [req.user.id], (err, listings) => {
+  const query = `
+    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+    FROM food_listings fl
+    JOIN users u ON fl.userId = u.id
+    WHERE fl.userId = ?
+    ORDER BY fl.createdAt DESC
+  `;
+  
+  db.all(query, [req.user.id], (err, listings) => {
     if (err) {
       return res.status(500).json({ error: 'İlanlar getirilemedi' });
     }
