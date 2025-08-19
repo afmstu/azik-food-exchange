@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const sqlite3 = require('sqlite3').verbose();
 const { v4: uuidv4 } = require('uuid');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer');
+const validator = require('validator');
 require('dotenv').config();
 
 const app = express();
@@ -27,6 +29,7 @@ db.serialize(() => {
   db.run('DROP TABLE IF EXISTS notifications');
   db.run('DROP TABLE IF EXISTS exchange_offers');
   db.run('DROP TABLE IF EXISTS food_listings');
+  db.run('DROP TABLE IF EXISTS email_verifications');
   db.run('DROP TABLE IF EXISTS users');
   
   // Users table
@@ -35,14 +38,30 @@ db.serialize(() => {
     role TEXT NOT NULL,
     firstName TEXT NOT NULL,
     lastName TEXT NOT NULL,
-    phone TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    phone TEXT NOT NULL UNIQUE,
     province TEXT NOT NULL,
     district TEXT NOT NULL,
     neighborhood TEXT NOT NULL,
     fullAddress TEXT NOT NULL,
     password TEXT NOT NULL,
     fcmToken TEXT,
+    isEmailVerified BOOLEAN DEFAULT 0,
+    isLocked BOOLEAN DEFAULT 0,
+    failedLoginAttempts INTEGER DEFAULT 0,
+    lastFailedLogin DATETIME,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Email verifications table
+  db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    email TEXT NOT NULL,
+    verificationToken TEXT NOT NULL UNIQUE,
+    expiresAt DATETIME NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
   )`);
 
   // Food listings table
@@ -88,6 +107,83 @@ db.serialize(() => {
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'azik-secret-key';
+
+// Email validation function
+const validateEmail = (email) => {
+  return validator.isEmail(email);
+};
+
+// Password validation function
+const validatePassword = (password) => {
+  // Sadece minimum 8 karakter kontrolü
+  return password.length >= 8;
+};
+
+// Nodemailer transporter setup
+let transporter;
+if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  transporter = nodemailer.createTransporter({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+  console.log('Email transporter initialized');
+} else {
+  console.log('Email credentials not found - email verification disabled');
+}
+
+// Send verification email function
+const sendVerificationEmail = async (email, verificationToken) => {
+  if (!transporter) {
+    console.log('Email transporter not available');
+    return false;
+  }
+
+  const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+  
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Azık - E-posta Doğrulama',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #ff9a56 0%, #ffd93d 50%, #ff6b35 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">Azık</h1>
+          <p style="color: white; margin: 10px 0 0 0;">Yemek Takası Platformu</p>
+        </div>
+        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <h2 style="color: #333; margin-bottom: 20px;">E-posta Adresinizi Doğrulayın</h2>
+          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+            Azık platformuna hoş geldiniz! Hesabınızı aktifleştirmek için aşağıdaki butona tıklayarak e-posta adresinizi doğrulayın.
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${verificationUrl}" style="background: linear-gradient(135deg, #ff6b35, #ff9a56); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">
+              E-posta Adresimi Doğrula
+            </a>
+          </div>
+          <p style="color: #999; font-size: 14px; margin-top: 25px;">
+            Bu e-posta 24 saat geçerlidir. Eğer bu işlemi siz yapmadıysanız, bu e-postayı görmezden gelebilirsiniz.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
+          </p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Verification email sent to ${email}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending verification email:', error);
+    return false;
+  }
+};
 
 // Initialize Firebase Admin SDK
 let serviceAccount;
@@ -177,56 +273,109 @@ const authenticateToken = (req, res, next) => {
 // Register
 app.post('/api/register', async (req, res) => {
   try {
-    const { role, firstName, lastName, phone, province, district, neighborhood, fullAddress, password } = req.body;
+    const { role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, password } = req.body;
     
-    if (!role || !firstName || !lastName || !phone || !province || !district || !neighborhood || !fullAddress || !password) {
+    if (!role || !firstName || !lastName || !email || !phone || !province || !district || !neighborhood || !fullAddress || !password) {
       return res.status(400).json({ error: 'Tüm alanlar zorunludur' });
+    }
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
+    }
+
+    // Validate password
+    if (!validatePassword(password)) {
+      return res.status(400).json({ error: 'Şifre en az 8 karakter olmalıdır' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = uuidv4();
 
-    db.run(
-      'INSERT INTO users (id, role, firstName, lastName, phone, province, district, neighborhood, fullAddress, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, role, firstName, lastName, phone, province, district, neighborhood, fullAddress, hashedPassword],
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Kayıt oluşturulamadı' });
-        }
-        
-        const token = jwt.sign({ id: userId, role, firstName, lastName }, JWT_SECRET);
-        res.status(201).json({ 
-          message: 'Kayıt başarılı',
-          token,
-          user: { id: userId, role, firstName, lastName, phone, province, district, neighborhood, fullAddress }
-        });
+    // Check if email or phone already exists
+    db.get('SELECT id FROM users WHERE email = ? OR phone = ?', [email, phone], async (err, existingUser) => {
+      if (err) {
+        return res.status(500).json({ error: 'Sunucu hatası' });
       }
-    );
+
+      if (existingUser) {
+        return res.status(400).json({ error: 'Bu e-posta adresi veya telefon numarası zaten kullanılıyor' });
+      }
+
+      // Insert user with email verification status
+      db.run(
+        'INSERT INTO users (id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, password, isEmailVerified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, hashedPassword, 0],
+        async function(err) {
+          if (err) {
+            return res.status(500).json({ error: 'Kayıt oluşturulamadı' });
+          }
+
+          // Create verification token
+          const verificationToken = uuidv4();
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+          // Insert verification record
+          db.run(
+            'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
+            [uuidv4(), userId, email, verificationToken, expiresAt.toISOString()],
+            async function(err) {
+              if (err) {
+                console.error('Error creating verification record:', err);
+              }
+
+              // Send verification email
+              const emailSent = await sendVerificationEmail(email, verificationToken);
+              
+              res.status(201).json({ 
+                message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
+                requiresVerification: true,
+                user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+              });
+            }
+          );
+        }
+      );
+    });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // Login
 app.post('/api/login', (req, res) => {
-  const { phone, password } = req.body;
+  const { email, password } = req.body;
 
-  if (!phone || !password) {
-    return res.status(400).json({ error: 'Telefon ve şifre zorunludur' });
+  if (!email || !password) {
+    return res.status(400).json({ error: 'E-posta ve şifre zorunludur' });
   }
 
-  db.get('SELECT * FROM users WHERE phone = ?', [phone], async (err, user) => {
+  // Validate email format
+  if (!validateEmail(email)) {
+    return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
+  }
+
+  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
     if (err) {
       return res.status(500).json({ error: 'Sunucu hatası' });
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'Geçersiz telefon numarası veya şifre' });
+      return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return res.status(401).json({ 
+        error: 'E-posta adresiniz henüz doğrulanmamış',
+        requiresVerification: true 
+      });
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json({ error: 'Geçersiz telefon numarası veya şifre' });
+      return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
     }
 
     const token = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
@@ -238,6 +387,7 @@ app.post('/api/login', (req, res) => {
         role: user.role, 
         firstName: user.firstName, 
         lastName: user.lastName, 
+        email: user.email,
         phone: user.phone,
         province: user.province,
         district: user.district,
@@ -282,9 +432,141 @@ app.put('/api/user/address', authenticateToken, (req, res) => {
   );
 });
 
+// Email verification endpoint
+app.post('/api/verify-email', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Doğrulama token\'ı gerekli' });
+    }
+
+    // Find verification record
+    db.get('SELECT * FROM email_verifications WHERE verificationToken = ?', [token], async (err, verification) => {
+      if (err) {
+        return res.status(500).json({ error: 'Sunucu hatası' });
+      }
+
+      if (!verification) {
+        return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
+      }
+
+      // Check if token is expired
+      if (new Date() > new Date(verification.expiresAt)) {
+        return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
+      }
+
+      // Update user email verification status
+      db.run('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'E-posta doğrulanamadı' });
+        }
+
+        // Delete the verification record
+        db.run('DELETE FROM email_verifications WHERE id = ?', [verification.id], function(err) {
+          if (err) {
+            console.error('Error deleting verification record:', err);
+          }
+
+          // Get user info for token
+          db.get('SELECT * FROM users WHERE id = ?', [verification.userId], (err, user) => {
+            if (err) {
+              return res.status(500).json({ error: 'Kullanıcı bilgileri alınamadı' });
+            }
+
+            const token = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
+            
+            res.json({ 
+              success: true,
+              message: 'E-posta başarıyla doğrulandı',
+              token,
+              user: { 
+                id: user.id, 
+                role: user.role, 
+                firstName: user.firstName, 
+                lastName: user.lastName,
+                email: user.email,
+                phone: user.phone,
+                province: user.province,
+                district: user.district,
+                neighborhood: user.neighborhood,
+                fullAddress: user.fullAddress
+              }
+            });
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
+// Resend verification email endpoint
+app.post('/api/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !validateEmail(email)) {
+      return res.status(400).json({ error: 'Geçerli bir e-posta adresi gerekli' });
+    }
+
+    // Find user
+    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+      if (err) {
+        return res.status(500).json({ error: 'Sunucu hatası' });
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı' });
+      }
+
+      if (user.isEmailVerified) {
+        return res.status(400).json({ error: 'Bu e-posta adresi zaten doğrulanmış' });
+      }
+
+      // Delete old verification records
+      db.run('DELETE FROM email_verifications WHERE userId = ?', [user.id], function(err) {
+        if (err) {
+          console.error('Error deleting old verification records:', err);
+        }
+
+        // Create new verification token
+        const verificationToken = uuidv4();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        // Insert new verification record
+        db.run(
+          'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
+          [uuidv4(), user.id, email, verificationToken, expiresAt.toISOString()],
+          async function(err) {
+            if (err) {
+              console.error('Error creating verification record:', err);
+              return res.status(500).json({ error: 'Doğrulama e-postası gönderilemedi' });
+            }
+
+            // Send verification email
+            const emailSent = await sendVerificationEmail(email, verificationToken);
+            
+            if (emailSent) {
+              res.json({ message: 'Doğrulama e-postası tekrar gönderildi' });
+            } else {
+              res.status(500).json({ error: 'E-posta gönderilemedi' });
+            }
+          }
+        );
+      });
+    });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
 // Get current user profile
 app.get('/api/user/profile', authenticateToken, (req, res) => {
-  db.get('SELECT id, role, firstName, lastName, phone, province, district, neighborhood, fullAddress, createdAt FROM users WHERE id = ?', [req.user.id], (err, user) => {
+  db.get('SELECT id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, createdAt FROM users WHERE id = ?', [req.user.id], (err, user) => {
     if (err) {
       return res.status(500).json({ error: 'Kullanıcı bilgileri getirilemedi' });
     }
