@@ -358,51 +358,50 @@ function Home() {
         </div>
       </div>
 
-             {/* Geliştirici Butonu */}
-       <div className="text-center mb-8">
-         <button 
-           onClick={() => setShowDeveloperLogin(true)}
-           className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors duration-200"
-         >
-           <Settings size={16} />
-           Geliştirici
-         </button>
-       </div>
+                     {/* Footer */}
+        <footer className="bg-white rounded-lg shadow-lg p-8 mt-12">
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
+                <Utensils size={20} className="text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800">Azık</h3>
+            </div>
+            
+            <p className="text-gray-600 mb-6 leading-relaxed max-w-4xl mx-auto">
+              Azık, gıda sektöründe çalışanların birbirleriyle yemeklerini paylaşabilmesi için kurulmuş bir dayanışma platformudur.
+              Burada amaç, farklı işyerlerinde çalışan insanların öğle yemeklerinde çeşitlilik yaşaması, birbirlerinin emeğinden faydalanması ve birlikte paylaşarak güçlenmesidir.
+            </p>
+            
+            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-6 mb-6">
+              <p className="text-gray-700 font-medium mb-2">
+                Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
+              </p>
+              <p className="text-gray-600 text-sm">
+                Azık, hiçbir ticari kaygı taşımadan; emekçinin, çalışanın ve alın teri döken herkesin yanında olmayı ilke edinmiştir.
+              </p>
+            </div>
+            
+            <div className="border-t border-gray-200 pt-6">
+              <p className="text-gray-700 font-semibold mb-2">
+                Biz, birlikte paylaştıkça çoğalacağımıza inanıyoruz.
+              </p>
+              <p className="text-gray-600">
+                Azık'ta herkesin emeği eşit, herkesin yemeği değerlidir.
+              </p>
+            </div>
+          </div>
+        </footer>
 
-       {/* Footer */}
-       <footer className="bg-white rounded-lg shadow-lg p-8 mt-12">
-         <div className="text-center">
-           <div className="flex items-center justify-center gap-2 mb-4">
-             <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
-               <Utensils size={20} className="text-white" />
-             </div>
-             <h3 className="text-2xl font-bold text-gray-800">Azık</h3>
-           </div>
-           
-           <p className="text-gray-600 mb-6 leading-relaxed max-w-4xl mx-auto">
-             Azık, gıda sektöründe çalışanların birbirleriyle yemeklerini paylaşabilmesi için kurulmuş bir dayanışma platformudur.
-             Burada amaç, farklı işyerlerinde çalışan insanların öğle yemeklerinde çeşitlilik yaşaması, birbirlerinin emeğinden faydalanması ve birlikte paylaşarak güçlenmesidir.
-           </p>
-           
-           <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-6 mb-6">
-             <p className="text-gray-700 font-medium mb-2">
-               Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
-             </p>
-             <p className="text-gray-600 text-sm">
-               Azık, hiçbir ticari kaygı taşımadan; emekçinin, çalışanın ve alın teri döken herkesin yanında olmayı ilke edinmiştir.
-             </p>
-           </div>
-           
-           <div className="border-t border-gray-200 pt-6">
-             <p className="text-gray-700 font-semibold mb-2">
-               Biz, birlikte paylaştıkça çoğalacağımıza inanıyoruz.
-             </p>
-             <p className="text-gray-600">
-               Azık'ta herkesin emeği eşit, herkesin yemeği değerlidir.
-             </p>
-           </div>
-         </div>
-       </footer>
+        {/* Geliştirici Butonu - Şık Tasarım */}
+        <div className="text-center mt-8 mb-8">
+          <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-full shadow-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 cursor-pointer" onClick={() => setShowDeveloperLogin(true)}>
+            <Settings size={18} className="animate-pulse" />
+            <span className="font-medium">Geliştirici Girişi</span>
+            <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 opacity-75">Sadece geliştiriciler için</p>
+        </div>
 
       {/* Developer Login Modal */}
       {showDeveloperLogin && (
