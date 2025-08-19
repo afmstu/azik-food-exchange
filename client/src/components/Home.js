@@ -34,11 +34,19 @@ function Home() {
   const { user } = useAuth();
 
   useEffect(() => {
-    fetchListings();
+    if (user) {
+      fetchListings();
+    }
     fetchProvinces();
   }, [filters, user]);
 
   const fetchListings = async () => {
+    if (!user) {
+      setListings([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -48,7 +56,9 @@ function Home() {
       const response = await axios.get(`/api/listings?${params.toString()}`);
       setListings(response.data);
     } catch (error) {
+      console.error('İlanlar yüklenemedi:', error);
       toast.error('İlanlar yüklenemedi');
+      setListings([]);
     } finally {
       setLoading(false);
     }
