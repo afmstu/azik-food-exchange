@@ -41,11 +41,13 @@ function Home() {
   const fetchListings = async () => {
     try {
       setLoading(true);
+      console.log('Fetching all listings...');
       const params = new URLSearchParams();
       if (filters.province) params.append('province', filters.province);
       if (filters.district) params.append('district', filters.district);
       
       const response = await axios.get(`/api/listings?${params.toString()}`);
+      console.log('All listings response:', response.data);
       setListings(response.data);
     } catch (error) {
       console.error('İlanlar yüklenemedi:', error);

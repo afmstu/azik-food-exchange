@@ -292,6 +292,7 @@ app.delete('/api/listings/:listingId', authenticateToken, (req, res) => {
 
 // Get all active listings
 app.get('/api/listings', (req, res) => {
+  console.log('All listings requested with filters:', req.query);
   const { province, district } = req.query;
   let query = `
     SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
@@ -312,10 +313,15 @@ app.get('/api/listings', (req, res) => {
 
   query += ' ORDER BY fl.createdAt DESC';
 
+  console.log('Query:', query);
+  console.log('Params:', params);
+
   db.all(query, params, (err, listings) => {
     if (err) {
+      console.error('Database error:', err);
       return res.status(500).json({ error: 'İlanlar getirilemedi' });
     }
+    console.log('Found listings:', listings.length);
     res.json(listings);
   });
 });
@@ -455,6 +461,8 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
 
 // Get user's listings
 app.get('/api/my-listings', authenticateToken, (req, res) => {
+  console.log('My listings requested for user:', req.user.id);
+  
   const query = `
     SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
     FROM food_listings fl
@@ -463,10 +471,15 @@ app.get('/api/my-listings', authenticateToken, (req, res) => {
     ORDER BY fl.createdAt DESC
   `;
   
+  console.log('Query:', query);
+  console.log('User ID:', req.user.id);
+  
   db.all(query, [req.user.id], (err, listings) => {
     if (err) {
+      console.error('Database error:', err);
       return res.status(500).json({ error: 'İlanlar getirilemedi' });
     }
+    console.log('Found my listings:', listings.length);
     res.json(listings);
   });
 });

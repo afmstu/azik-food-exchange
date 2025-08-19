@@ -16,9 +16,12 @@ function MyListings() {
   const fetchListings = async () => {
     try {
       setLoading(true);
+      console.log('Fetching my listings...');
       const response = await axios.get('/api/my-listings');
+      console.log('My listings response:', response.data);
       setListings(response.data);
     } catch (error) {
+      console.error('Error fetching my listings:', error);
       toast.error('İlanlar yüklenemedi');
     } finally {
       setLoading(false);
