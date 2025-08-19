@@ -55,6 +55,16 @@ function CreateListing() {
     try {
       await axios.post('/api/listings', formData);
       toast.success('İlan başarıyla oluşturuldu!');
+      
+      // Reset form
+      setFormData({
+        foodName: '',
+        quantity: '',
+        details: '',
+        startTime: '',
+        endTime: ''
+      });
+      
       navigate('/');
     } catch (error) {
       toast.error(error.response?.data?.error || 'İlan oluşturulamadı');

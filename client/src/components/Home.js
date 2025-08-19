@@ -36,7 +36,7 @@ function Home() {
   useEffect(() => {
     fetchListings();
     fetchProvinces();
-  }, [filters]);
+  }, [filters, user]);
 
   const fetchListings = async () => {
     try {
