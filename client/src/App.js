@@ -40,7 +40,7 @@ function App() {
               <Route path="/my-offers" element={<ProtectedRoute><MyOffers /></ProtectedRoute>} />
               <Route path="/listing-offers" element={<ProtectedRoute><ListingOffers /></ProtectedRoute>} />
               <Route path="/update-address" element={<ProtectedRoute><UpdateAddress /></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="/admin" element={<Admin />} />
             </Routes>
           </main>
         </div>

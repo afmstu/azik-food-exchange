@@ -40,7 +40,16 @@ function Admin() {
     }
   };
 
-  if (!user || user.role !== 'admin') {
+  // Geliştirici kimlik bilgileri kontrolü
+  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+  const ADMIN_PASSWORD = 'admin123456';
+  
+  // URL'den parametreleri al
+  const urlParams = new URLSearchParams(window.location.search);
+  const email = urlParams.get('email');
+  const password = urlParams.get('password');
+  
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
     return (
       <div className="container">
         <div className="auth-card">
@@ -48,6 +57,12 @@ function Admin() {
             <Shield className="w-12 h-12 mx-auto mb-4 text-red-500" />
             <h2 className="text-xl font-semibold mb-2">Erişim Reddedildi</h2>
             <p className="text-gray-600">Bu sayfaya erişim yetkiniz bulunmamaktadır.</p>
+            <button 
+              onClick={() => window.location.href = '/'}
+              className="mt-4 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+            >
+              Ana Sayfaya Dön
+            </button>
           </div>
         </div>
       </div>

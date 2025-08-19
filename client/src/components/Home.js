@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Heart,
   UserPlus,
-  LogIn
+  LogIn,
+  Settings
 } from 'lucide-react';
 
 function Home() {
@@ -30,6 +31,9 @@ function Home() {
   });
   const [loading, setLoading] = useState(true);
   const [offering, setOffering] = useState({});
+  const [showDeveloperLogin, setShowDeveloperLogin] = useState(false);
+  const [developerEmail, setDeveloperEmail] = useState('');
+  const [developerPassword, setDeveloperPassword] = useState('');
 
   const { user } = useAuth();
 
@@ -108,6 +112,24 @@ function Home() {
 
   const formatTime = (time) => {
     return time.substring(0, 5);
+  };
+
+  const handleDeveloperLogin = async (e) => {
+    e.preventDefault();
+    
+    // Geliştirici kimlik bilgileri (sadece siz bilin)
+    const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+    const ADMIN_PASSWORD = 'admin123456';
+    
+    if (developerEmail === ADMIN_EMAIL && developerPassword === ADMIN_PASSWORD) {
+      // Admin paneline yönlendir (parametrelerle)
+      window.location.href = `/admin?email=${encodeURIComponent(developerEmail)}&password=${encodeURIComponent(developerPassword)}`;
+      setShowDeveloperLogin(false);
+      setDeveloperEmail('');
+      setDeveloperPassword('');
+    } else {
+      toast.error('Geçersiz e-posta veya şifre');
+    }
   };
 
   if (loading) {
@@ -335,6 +357,106 @@ function Home() {
           <p className="text-gray-600">Başarılı Takas</p>
         </div>
       </div>
+
+             {/* Geliştirici Butonu */}
+       <div className="text-center mb-8">
+         <button 
+           onClick={() => setShowDeveloperLogin(true)}
+           className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors duration-200"
+         >
+           <Settings size={16} />
+           Geliştirici
+         </button>
+       </div>
+
+       {/* Footer */}
+       <footer className="bg-white rounded-lg shadow-lg p-8 mt-12">
+         <div className="text-center">
+           <div className="flex items-center justify-center gap-2 mb-4">
+             <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
+               <Utensils size={20} className="text-white" />
+             </div>
+             <h3 className="text-2xl font-bold text-gray-800">Azık</h3>
+           </div>
+           
+           <p className="text-gray-600 mb-6 leading-relaxed max-w-4xl mx-auto">
+             Azık, gıda sektöründe çalışanların birbirleriyle yemeklerini paylaşabilmesi için kurulmuş bir dayanışma platformudur.
+             Burada amaç, farklı işyerlerinde çalışan insanların öğle yemeklerinde çeşitlilik yaşaması, birbirlerinin emeğinden faydalanması ve birlikte paylaşarak güçlenmesidir.
+           </p>
+           
+           <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-6 mb-6">
+             <p className="text-gray-700 font-medium mb-2">
+               Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
+             </p>
+             <p className="text-gray-600 text-sm">
+               Azık, hiçbir ticari kaygı taşımadan; emekçinin, çalışanın ve alın teri döken herkesin yanında olmayı ilke edinmiştir.
+             </p>
+           </div>
+           
+           <div className="border-t border-gray-200 pt-6">
+             <p className="text-gray-700 font-semibold mb-2">
+               Biz, birlikte paylaştıkça çoğalacağımıza inanıyoruz.
+             </p>
+             <p className="text-gray-600">
+               Azık'ta herkesin emeği eşit, herkesin yemeği değerlidir.
+             </p>
+           </div>
+         </div>
+       </footer>
+
+      {/* Developer Login Modal */}
+      {showDeveloperLogin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Geliştirici Girişi</h2>
+              <button 
+                onClick={() => setShowDeveloperLogin(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleDeveloperLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-posta
+                </label>
+                <input
+                  type="email"
+                  value={developerEmail}
+                  onChange={(e) => setDeveloperEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="admin@azik.com"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Şifre
+                </label>
+                <input
+                  type="password"
+                  value={developerPassword}
+                  onChange={(e) => setDeveloperPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2 px-4 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 font-medium"
+              >
+                Giriş Yap
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
