@@ -90,23 +90,23 @@ db.serialize(() => {
 const JWT_SECRET = process.env.JWT_SECRET || 'azik-secret-key';
 
 // Initialize Firebase Admin SDK
-// Bu bilgileri Firebase Console'dan alacaksınız
-const serviceAccount = {
-  "type": "service_account",
-  "project_id": "YOUR_PROJECT_ID",
-  "private_key_id": "YOUR_PRIVATE_KEY_ID",
-  "private_key": "YOUR_PRIVATE_KEY",
-  "client_email": "YOUR_CLIENT_EMAIL",
-  "client_id": "YOUR_CLIENT_ID",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "YOUR_CERT_URL"
-};
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  console.log('Firebase service account not found in environment variables');
+  // For now, skip Firebase initialization in development
+  serviceAccount = null;
+}
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+if (serviceAccount) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log('Firebase Admin SDK initialized successfully');
+} else {
+  console.log('Firebase Admin SDK not initialized - service account not available');
+}
 
 // Helper function to create notifications
 const createNotification = (userId, type, title, message, relatedId = null) => {
@@ -120,6 +120,12 @@ const createNotification = (userId, type, title, message, relatedId = null) => {
 // Helper function to send FCM notification
 const sendFCMNotification = async (userId, title, body, data = {}) => {
   try {
+    // Check if Firebase Admin is initialized
+    if (!admin.apps.length) {
+      console.log('Firebase Admin not initialized, skipping FCM notification');
+      return;
+    }
+
     // Get user's FCM token
     db.get('SELECT fcmToken FROM users WHERE id = ?', [userId], async (err, user) => {
       if (err || !user || !user.fcmToken) {
