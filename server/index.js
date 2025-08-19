@@ -243,8 +243,8 @@ app.post('/api/listings', authenticateToken, (req, res) => {
   const listingId = uuidv4();
 
   db.run(
-    'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [listingId, userId, foodName, quantity, details, startTime, endTime],
+    'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [listingId, userId, foodName, quantity, details, startTime, endTime, 'active'],
     function(err) {
       if (err) {
         return res.status(500).json({ error: 'İlan oluşturulamadı' });
