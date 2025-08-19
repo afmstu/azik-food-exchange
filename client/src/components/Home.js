@@ -119,7 +119,7 @@ function Home() {
     
     // Geliştirici kimlik bilgileri (sadece siz bilin)
     const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-    const ADMIN_PASSWORD = 'admin123456';
+    const ADMIN_PASSWORD = 'mF3z4Vsf.';
     
     if (developerEmail === ADMIN_EMAIL && developerPassword === ADMIN_PASSWORD) {
       // Admin paneline yönlendir (parametrelerle)

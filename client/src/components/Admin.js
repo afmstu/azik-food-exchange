@@ -42,7 +42,7 @@ function Admin() {
 
   // Geliştirici kimlik bilgileri kontrolü
   const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-  const ADMIN_PASSWORD = 'admin123456';
+  const ADMIN_PASSWORD = 'mF3z4Vsf.';
   
   // URL'den parametreleri al
   const urlParams = new URLSearchParams(window.location.search);
