@@ -17,7 +17,7 @@ function Admin() {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('/api/admin/users');
+      const response = await axios.get(`/api/admin/users?email=${ADMIN_EMAIL}&password=${ADMIN_PASSWORD}`);
       setUsers(response.data);
     } catch (error) {
       toast.error('Kullanıcılar yüklenirken hata oluştu');
@@ -32,7 +32,7 @@ function Admin() {
     }
 
     try {
-      await axios.delete(`/api/admin/users/${userId}`);
+      await axios.delete(`/api/admin/users/${userId}?email=${ADMIN_EMAIL}&password=${ADMIN_PASSWORD}`);
       toast.success('Kullanıcı başarıyla silindi');
       fetchUsers();
     } catch (error) {

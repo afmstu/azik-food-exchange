@@ -1201,6 +1201,85 @@ app.get('/api/notifications/unread-count', authenticateToken, (req, res) => {
   );
 });
 
+// Admin endpoints
+// Get all users (admin only)
+app.get('/api/admin/users', (req, res) => {
+  // Check for admin credentials in URL parameters
+  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+  const email = urlParams.get('email');
+  const password = urlParams.get('password');
+  
+  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+  const ADMIN_PASSWORD = 'mF3z4Vsf.';
+  
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Admin yetkisi gerekli' });
+  }
+
+  db.all(
+    'SELECT id, firstName, lastName, email, phone, role, province, district, neighborhood, isEmailVerified, createdAt FROM users ORDER BY createdAt DESC',
+    (err, users) => {
+      if (err) {
+        return res.status(500).json({ error: 'Kullanıcılar getirilemedi' });
+      }
+      res.json(users);
+    }
+  );
+});
+
+// Delete user (admin only)
+app.delete('/api/admin/users/:userId', (req, res) => {
+  const { userId } = req.params;
+  
+  // Check for admin credentials in URL parameters
+  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+  const email = urlParams.get('email');
+  const password = urlParams.get('password');
+  
+  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+  const ADMIN_PASSWORD = 'mF3z4Vsf.';
+  
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Admin yetkisi gerekli' });
+  }
+
+  // Delete user's listings first
+  db.run('DELETE FROM food_listings WHERE userId = ?', [userId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Kullanıcı ilanları silinemedi' });
+    }
+
+    // Delete user's offers
+    db.run('DELETE FROM exchange_offers WHERE offererId = ?', [userId], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Kullanıcı teklifleri silinemedi' });
+      }
+
+      // Delete user's notifications
+      db.run('DELETE FROM notifications WHERE userId = ?', [userId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Kullanıcı bildirimleri silinemedi' });
+        }
+
+        // Delete user's email verifications
+        db.run('DELETE FROM email_verifications WHERE userId = ?', [userId], function(err) {
+          if (err) {
+            return res.status(500).json({ error: 'Kullanıcı e-posta doğrulamaları silinemedi' });
+          }
+
+          // Finally delete the user
+          db.run('DELETE FROM users WHERE id = ?', [userId], function(err) {
+            if (err) {
+              return res.status(500).json({ error: 'Kullanıcı silinemedi' });
+            }
+            res.json({ message: 'Kullanıcı başarıyla silindi' });
+          });
+        });
+      });
+    });
+  });
+});
+
 // Catch all handler: send back React's index.html file for any non-API routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build/index.html'));
