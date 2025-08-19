@@ -25,9 +25,9 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = async (phone, password) => {
+  const login = async (email, password) => {
     try {
-      const response = await axios.post('/api/login', { phone, password });
+      const response = await axios.post('/api/login', { email, password });
       const { token, user } = response.data;
       
       localStorage.setItem('token', token);
@@ -44,6 +44,14 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
+      // Check if email verification is required
+      if (error.response?.data?.requiresVerification) {
+        return { 
+          requiresVerification: true,
+          error: error.response.data.error
+        };
+      }
+      
       return { 
         success: false, 
         error: error.response?.data?.error || 'Giriş yapılamadı' 
@@ -54,6 +62,16 @@ export function AuthProvider({ children }) {
   const register = async (userData) => {
     try {
       const response = await axios.post('/api/register', userData);
+      
+      // Check if email verification is required
+      if (response.data.requiresVerification) {
+        return { 
+          requiresVerification: true,
+          message: response.data.message,
+          emailSent: response.data.emailSent
+        };
+      }
+      
       const { token, user } = response.data;
       
       localStorage.setItem('token', token);

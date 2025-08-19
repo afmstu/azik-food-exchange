@@ -327,11 +327,20 @@ app.post('/api/register', async (req, res) => {
               // Send verification email
               const emailSent = await sendVerificationEmail(email, verificationToken);
               
-              res.status(201).json({ 
-                message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
-                requiresVerification: true,
-                user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
-              });
+              if (emailSent) {
+                res.status(201).json({ 
+                  message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
+                  requiresVerification: true,
+                  user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+                });
+              } else {
+                res.status(201).json({ 
+                  message: 'Kayıt başarılı! E-posta gönderilemedi, lütfen daha sonra tekrar deneyin.',
+                  requiresVerification: true,
+                  emailSent: false,
+                  user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+                });
+              }
             }
           );
         }

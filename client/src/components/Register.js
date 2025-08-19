@@ -34,6 +34,8 @@ function Register() {
   const [districts, setDistricts] = useState([]);
   const [neighborhoods, setNeighborhoods] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
   
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -128,7 +130,11 @@ function Register() {
 
     const result = await register(userData);
     
-    if (result.success) {
+    if (result.requiresVerification) {
+      setShowVerificationMessage(true);
+      setPendingEmail(formData.email);
+      toast.success(result.message || 'Kayıt başarılı! E-posta adresinizi doğrulayın.');
+    } else if (result.success) {
       toast.success('Kayıt başarılı!');
       navigate('/');
     } else {
@@ -137,6 +143,86 @@ function Register() {
     
     setLoading(false);
   };
+
+  const handleResendVerification = async () => {
+    try {
+      setLoading(true);
+      await axios.post('/api/resend-verification', { email: pendingEmail });
+      toast.success('Doğrulama e-postası tekrar gönderildi');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'E-posta gönderilemedi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (showVerificationMessage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center py-12 px-4">
+        <div className="form-container" style={{ maxWidth: '500px' }}>
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Mail size={32} className="text-white" />
+            </div>
+            <h1 className="form-title">E-posta Doğrulama Gerekli</h1>
+            <p className="form-subtitle">
+              Hesabınızı aktifleştirmek için e-posta adresinizi doğrulayın
+            </p>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="text-center">
+              <p className="text-gray-700 mb-4">
+                <strong>{pendingEmail}</strong> adresine doğrulama e-postası gönderdik.
+              </p>
+              <p className="text-gray-600 text-sm mb-6">
+                E-postanızı kontrol edin ve "E-posta Adresimi Doğrula" butonuna tıklayın.
+              </p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={handleResendVerification}
+                  disabled={loading}
+                  className="btn btn-secondary w-full"
+                >
+                  {loading ? (
+                    <div className="spinner"></div>
+                  ) : (
+                    <>
+                      <Mail size={16} />
+                      E-postayı Tekrar Gönder
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowVerificationMessage(false);
+                    setPendingEmail('');
+                  }}
+                  className="btn btn-outline w-full"
+                >
+                  Farklı E-posta Kullan
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="text-center">
+            <p className="text-gray-600">
+              Zaten hesabınız var mı?{' '}
+              <Link 
+                to="/login" 
+                className="text-orange-600 hover:text-orange-500 font-semibold transition-colors"
+              >
+                Giriş yapın
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4">
