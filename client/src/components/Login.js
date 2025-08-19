@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
-import { Phone, Lock, LogIn, ArrowRight } from 'lucide-react';
+import { Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
 
 function Login() {
   const [formData, setFormData] = useState({
-    phone: '',
+    email: '',
     password: ''
   });
   const [loading, setLoading] = useState(false);
@@ -25,13 +25,13 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.phone || !formData.password) {
+    if (!formData.email || !formData.password) {
       toast.error('Tüm alanları doldurun');
       return;
     }
 
     setLoading(true);
-    const result = await login(formData.phone, formData.password);
+    const result = await login(formData.email, formData.password);
     
     if (result.success) {
       toast.success('Giriş başarılı!');
@@ -58,21 +58,21 @@ function Login() {
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="form-group">
-            <label htmlFor="phone" className="form-label">
-              Telefon Numarası
+            <label htmlFor="email" className="form-label">
+              E-posta Adresi
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Phone size={20} className="text-gray-400" />
+                <Mail size={20} className="text-gray-400" />
               </div>
               <input
-                id="phone"
-                name="phone"
-                type="tel"
+                id="email"
+                name="email"
+                type="email"
                 required
                 className="form-input pl-10"
-                placeholder="0555 123 45 67"
-                value={formData.phone}
+                placeholder="ornek@email.com"
+                value={formData.email}
                 onChange={handleChange}
               />
             </div>

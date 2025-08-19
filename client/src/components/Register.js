@@ -11,7 +11,8 @@ import {
   Building, 
   UserPlus, 
   ArrowRight,
-  CheckCircle
+  CheckCircle,
+  Mail
 } from 'lucide-react';
 
 function Register() {
@@ -19,6 +20,7 @@ function Register() {
     role: '',
     firstName: '',
     lastName: '',
+    email: '',
     phone: '',
     province: '',
     district: '',
@@ -104,8 +106,8 @@ function Register() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Şifre en az 6 karakter olmalıdır');
+    if (formData.password.length < 8) {
+      toast.error('Şifre en az 8 karakter olmalıdır');
       return;
     }
 
@@ -115,6 +117,7 @@ function Register() {
       role: formData.role,
       firstName: formData.firstName,
       lastName: formData.lastName,
+      email: formData.email,
       phone: formData.phone,
       province: formData.province,
       district: formData.district,
@@ -202,6 +205,28 @@ function Register() {
                 className="form-input"
                 placeholder="Soyadınız"
                 value={formData.lastName}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="email" className="form-label">
+              <Mail size={16} className="inline mr-2" />
+              E-posta Adresi *
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail size={20} className="text-gray-400" />
+              </div>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                className="form-input pl-10"
+                placeholder="ornek@email.com"
+                value={formData.email}
                 onChange={handleChange}
               />
             </div>
@@ -330,7 +355,7 @@ function Register() {
                   type="password"
                   required
                   className="form-input pl-10"
-                  placeholder="En az 6 karakter"
+                  placeholder="En az 8 karakter"
                   value={formData.password}
                   onChange={handleChange}
                 />
