@@ -20,9 +20,9 @@ export const requestNotificationPermission = async () => {
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      const token = await getToken(messaging, {
-        vapidKey: 'YOUR_VAPID_KEY' // Bu key'i Firebase Console'dan alacaksınız
-      });
+             const token = await getToken(messaging, {
+         vapidKey: 'BMfRXZJe2VQuf5mEhjsv9fwdw_VgpVJjXIPjLQ7IlLkNBOTNKevo3FcM_vYRqrX4Wg2lhzU2uZ510tCWald3EZE'
+       });
       return token;
     }
     return null;
