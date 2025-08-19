@@ -368,14 +368,19 @@ app.post('/api/offers', authenticateToken, (req, res) => {
             return res.status(500).json({ error: 'Teklif oluşturulamadı' });
           }
           
-          // Create notification for listing owner
-          createNotification(
-            listing.userId,
-            'new_offer',
-            'Yeni Teklif',
-            `${req.user.firstName} ${req.user.lastName} ilanınıza teklif verdi`,
-            offerId
-          );
+          // Get offerer details for notification
+          db.get('SELECT firstName, lastName FROM users WHERE id = ?', [offererId], (err, offerer) => {
+            if (!err && offerer) {
+              // Create notification for listing owner
+              createNotification(
+                listing.userId,
+                'new_offer',
+                'Yeni Teklif',
+                `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`,
+                offerId
+              );
+            }
+          });
           
           res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
         }
@@ -421,17 +426,22 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
           // Get user details for notification
           db.get('SELECT phone, firstName, lastName FROM users WHERE id = ?', [offer.offererId], (err, offerer) => {
             if (!err && offerer) {
-              // In a real app, you'd send SMS here
-              console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${req.user.phone}`);
-              
-              // Create notification for offerer
-              createNotification(
-                offer.offererId,
-                'offer_accepted',
-                'Teklif Kabul Edildi',
-                `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${req.user.phone}`,
-                offerId
-              );
+              // Get listing owner's phone number
+              db.get('SELECT phone FROM users WHERE id = ?', [req.user.id], (err, listingOwner) => {
+                if (!err && listingOwner) {
+                  // In a real app, you'd send SMS here
+                  console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
+                  
+                  // Create notification for offerer
+                  createNotification(
+                    offer.offererId,
+                    'offer_accepted',
+                    'Teklif Kabul Edildi',
+                    `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`,
+                    offerId
+                  );
+                }
+              });
             }
           });
         } else {
