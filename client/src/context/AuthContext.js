@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { requestNotificationPermission } from '../firebase';
 
 const AuthContext = createContext();
 
@@ -34,6 +35,13 @@ export function AuthProvider({ children }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       setUser(user);
+      
+      // Request notification permission and save FCM token
+      const fcmToken = await requestNotificationPermission();
+      if (fcmToken) {
+        await axios.post('/api/user/fcm-token', { fcmToken });
+      }
+      
       return { success: true };
     } catch (error) {
       return { 
@@ -53,6 +61,13 @@ export function AuthProvider({ children }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       setUser(user);
+      
+      // Request notification permission and save FCM token
+      const fcmToken = await requestNotificationPermission();
+      if (fcmToken) {
+        await axios.post('/api/user/fcm-token', { fcmToken });
+      }
+      
       return { success: true };
     } catch (error) {
       return { 

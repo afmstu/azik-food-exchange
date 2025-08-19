@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sqlite3 = require('sqlite3').verbose();
 const { v4: uuidv4 } = require('uuid');
+const admin = require('firebase-admin');
 require('dotenv').config();
 
 const app = express();
@@ -40,6 +41,7 @@ db.serialize(() => {
     neighborhood TEXT NOT NULL,
     fullAddress TEXT NOT NULL,
     password TEXT NOT NULL,
+    fcmToken TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -87,6 +89,25 @@ db.serialize(() => {
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'azik-secret-key';
 
+// Initialize Firebase Admin SDK
+// Bu bilgileri Firebase Console'dan alacaksınız
+const serviceAccount = {
+  "type": "service_account",
+  "project_id": "YOUR_PROJECT_ID",
+  "private_key_id": "YOUR_PRIVATE_KEY_ID",
+  "private_key": "YOUR_PRIVATE_KEY",
+  "client_email": "YOUR_CLIENT_EMAIL",
+  "client_id": "YOUR_CLIENT_ID",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "YOUR_CERT_URL"
+};
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
 // Helper function to create notifications
 const createNotification = (userId, type, title, message, relatedId = null) => {
   const notificationId = uuidv4();
@@ -94,6 +115,37 @@ const createNotification = (userId, type, title, message, relatedId = null) => {
     'INSERT INTO notifications (id, userId, type, title, message, relatedId) VALUES (?, ?, ?, ?, ?, ?)',
     [notificationId, userId, type, title, message, relatedId]
   );
+};
+
+// Helper function to send FCM notification
+const sendFCMNotification = async (userId, title, body, data = {}) => {
+  try {
+    // Get user's FCM token
+    db.get('SELECT fcmToken FROM users WHERE id = ?', [userId], async (err, user) => {
+      if (err || !user || !user.fcmToken) {
+        console.log('FCM token not found for user:', userId);
+        return;
+      }
+
+      const message = {
+        notification: {
+          title: title,
+          body: body
+        },
+        data: data,
+        token: user.fcmToken
+      };
+
+      try {
+        const response = await admin.messaging().send(message);
+        console.log('FCM notification sent successfully:', response);
+      } catch (error) {
+        console.error('Error sending FCM notification:', error);
+      }
+    });
+  } catch (error) {
+    console.error('Error in sendFCMNotification:', error);
+  }
 };
 
 // Authentication middleware
@@ -239,6 +291,22 @@ app.get('/api/user/profile', authenticateToken, (req, res) => {
   });
 });
 
+// Save FCM token
+app.post('/api/user/fcm-token', authenticateToken, (req, res) => {
+  const { fcmToken } = req.body;
+  
+  if (!fcmToken) {
+    return res.status(400).json({ error: 'FCM token zorunludur' });
+  }
+
+  db.run('UPDATE users SET fcmToken = ? WHERE id = ?', [fcmToken, req.user.id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'FCM token kaydedilemedi' });
+    }
+    res.json({ message: 'FCM token başarıyla kaydedildi' });
+  });
+});
+
 // Create food listing
 app.post('/api/listings', authenticateToken, (req, res) => {
   const { foodName, quantity, details, startTime, endTime } = req.body;
@@ -371,13 +439,23 @@ app.post('/api/offers', authenticateToken, (req, res) => {
           // Get offerer details for notification
           db.get('SELECT firstName, lastName FROM users WHERE id = ?', [offererId], (err, offerer) => {
             if (!err && offerer) {
+              const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
+              
               // Create notification for listing owner
               createNotification(
                 listing.userId,
                 'new_offer',
                 'Yeni Teklif',
-                `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`,
+                notificationMessage,
                 offerId
+              );
+              
+              // Send FCM notification
+              sendFCMNotification(
+                listing.userId,
+                'Yeni Teklif',
+                notificationMessage,
+                { type: 'new_offer', offerId: offerId }
               );
             }
           });
@@ -432,26 +510,46 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
                   // In a real app, you'd send SMS here
                   console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
                   
+                  const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
+                  
                   // Create notification for offerer
                   createNotification(
                     offer.offererId,
                     'offer_accepted',
                     'Teklif Kabul Edildi',
-                    `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`,
+                    notificationMessage,
                     offerId
+                  );
+                  
+                  // Send FCM notification
+                  sendFCMNotification(
+                    offer.offererId,
+                    'Teklif Kabul Edildi',
+                    notificationMessage,
+                    { type: 'offer_accepted', offerId: offerId }
                   );
                 }
               });
             }
           });
         } else {
+          const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
+          
           // Create notification for rejected offer
           createNotification(
             offer.offererId,
             'offer_rejected',
             'Teklif Reddedildi',
-            `[${listing.foodName}] teklifiniz reddedildi`,
+            notificationMessage,
             offerId
+          );
+          
+          // Send FCM notification
+          sendFCMNotification(
+            offer.offererId,
+            'Teklif Reddedildi',
+            notificationMessage,
+            { type: 'offer_rejected', offerId: offerId }
           );
         }
 
