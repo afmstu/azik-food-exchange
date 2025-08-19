@@ -13,6 +13,8 @@ import MyListings from './components/MyListings';
 import MyOffers from './components/MyOffers';
 import ListingOffers from './components/ListingOffers';
 import UpdateAddress from './components/UpdateAddress';
+import EmailVerification from './components/EmailVerification';
+import Admin from './components/Admin';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -31,12 +33,14 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/verify-email" element={<EmailVerification />} />
               <Route path="/" element={<Home />} />
               <Route path="/create-listing" element={<ProtectedRoute><CreateListing /></ProtectedRoute>} />
               <Route path="/my-listings" element={<ProtectedRoute><MyListings /></ProtectedRoute>} />
               <Route path="/my-offers" element={<ProtectedRoute><MyOffers /></ProtectedRoute>} />
               <Route path="/listing-offers" element={<ProtectedRoute><ListingOffers /></ProtectedRoute>} />
               <Route path="/update-address" element={<ProtectedRoute><UpdateAddress /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             </Routes>
           </main>
         </div>

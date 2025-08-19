@@ -13,7 +13,8 @@ import {
   Utensils,
   MapPin,
   ChevronDown,
-  Bell
+  Bell,
+  Users
 } from 'lucide-react';
 
 function Header() {
@@ -229,6 +230,17 @@ function Header() {
                     </div>
                     
                     {/* Menu Items */}
+                    {user.role === 'admin' && (
+                      <Link 
+                        to="/admin" 
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors duration-200"
+                      >
+                        <Users size={16} />
+                        Admin Paneli
+                      </Link>
+                    )}
+                    
                     <Link 
                       to="/update-address" 
                       onClick={() => setShowUserMenu(false)}
