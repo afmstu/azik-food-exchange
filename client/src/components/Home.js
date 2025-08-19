@@ -34,19 +34,11 @@ function Home() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
-      fetchListings();
-    }
+    fetchListings();
     fetchProvinces();
-  }, [filters, user]);
+  }, [filters]);
 
   const fetchListings = async () => {
-    if (!user) {
-      setListings([]);
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       const params = new URLSearchParams();

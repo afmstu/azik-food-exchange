@@ -291,7 +291,7 @@ app.delete('/api/listings/:listingId', authenticateToken, (req, res) => {
 });
 
 // Get all active listings
-app.get('/api/listings', authenticateToken, (req, res) => {
+app.get('/api/listings', (req, res) => {
   const { province, district } = req.query;
   let query = `
     SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
@@ -463,7 +463,7 @@ app.get('/api/my-listings', authenticateToken, (req, res) => {
 // Get user's offers
 app.get('/api/my-offers', authenticateToken, (req, res) => {
   const query = `
-    SELECT eo.*, fl.foodName, fl.quantity, u.firstName, u.lastName, u.phone
+    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
     FROM exchange_offers eo
     JOIN food_listings fl ON eo.listingId = fl.id
     JOIN users u ON fl.userId = u.id
@@ -482,7 +482,7 @@ app.get('/api/my-offers', authenticateToken, (req, res) => {
 // Get offers for user's listings
 app.get('/api/listing-offers', authenticateToken, (req, res) => {
   const query = `
-    SELECT eo.*, fl.foodName, fl.quantity, u.firstName, u.lastName, u.phone
+    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
     FROM exchange_offers eo
     JOIN food_listings fl ON eo.listingId = fl.id
     JOIN users u ON eo.offererId = u.id
