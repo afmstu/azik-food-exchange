@@ -325,6 +325,8 @@ app.post('/api/offers', authenticateToken, (req, res) => {
   const { listingId } = req.body;
   const offererId = req.user.id;
 
+  console.log('Offer creation request:', { listingId, offererId, user: req.user.firstName });
+
   if (!listingId) {
     return res.status(400).json({ error: 'İlan ID zorunludur' });
   }
@@ -332,8 +334,11 @@ app.post('/api/offers', authenticateToken, (req, res) => {
   // Check if listing exists and is active
   db.get('SELECT * FROM food_listings WHERE id = ? AND status = "active"', [listingId], (err, listing) => {
     if (err || !listing) {
+      console.log('Listing not found or not active:', listingId);
       return res.status(404).json({ error: 'İlan bulunamadı' });
     }
+
+    console.log('Found listing:', { id: listing.id, userId: listing.userId, foodName: listing.foodName });
 
     if (listing.userId === offererId) {
       return res.status(400).json({ error: 'Kendi ilanınıza teklif veremezsiniz' });
@@ -342,22 +347,28 @@ app.post('/api/offers', authenticateToken, (req, res) => {
     // Check if user already made an offer
     db.get('SELECT * FROM exchange_offers WHERE listingId = ? AND offererId = ?', [listingId, offererId], (err, existingOffer) => {
       if (err) {
+        console.error('Error checking existing offer:', err);
         return res.status(500).json({ error: 'Sunucu hatası' });
       }
 
       if (existingOffer) {
+        console.log('User already made an offer to this listing');
         return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
       }
 
       const offerId = uuidv4();
+      console.log('Creating new offer with ID:', offerId);
 
       db.run(
         'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
         [offerId, listingId, offererId],
         function(err) {
           if (err) {
+            console.error('Error creating offer:', err);
             return res.status(500).json({ error: 'Teklif oluşturulamadı' });
           }
+          
+          console.log('Offer created successfully, creating notification for user:', listing.userId);
           
           // Create notification for listing owner
           createNotification(
@@ -481,6 +492,8 @@ app.get('/api/my-offers', authenticateToken, (req, res) => {
 
 // Get offers for user's listings
 app.get('/api/listing-offers', authenticateToken, (req, res) => {
+  console.log('Listing offers requested for user:', req.user.id);
+  
   const query = `
     SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
     FROM exchange_offers eo
@@ -492,8 +505,10 @@ app.get('/api/listing-offers', authenticateToken, (req, res) => {
   
   db.all(query, [req.user.id], (err, offers) => {
     if (err) {
+      console.error('Database error:', err);
       return res.status(500).json({ error: 'Teklifler getirilemedi' });
     }
+    console.log('Found offers:', offers.length);
     res.json(offers);
   });
 });

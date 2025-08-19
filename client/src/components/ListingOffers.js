@@ -14,9 +14,12 @@ function ListingOffers() {
   const fetchOffers = async () => {
     try {
       setLoading(true);
+      console.log('Fetching listing offers...');
       const response = await axios.get('/api/listing-offers');
+      console.log('Offers response:', response.data);
       setOffers(response.data);
     } catch (error) {
+      console.error('Error fetching offers:', error);
       toast.error('Teklifler yüklenemedi');
     } finally {
       setLoading(false);
