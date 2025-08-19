@@ -294,35 +294,58 @@ app.delete('/api/listings/:listingId', authenticateToken, (req, res) => {
 app.get('/api/listings', (req, res) => {
   console.log('All listings requested with filters:', req.query);
   const { province, district } = req.query;
-  let query = `
-    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-    FROM food_listings fl
-    JOIN users u ON fl.userId = u.id
-    WHERE fl.status = 'active'
-  `;
-  let params = [];
-
-  if (province) {
-    query += ' AND u.province = ?';
-    params.push(province);
-  }
-  if (district) {
-    query += ' AND u.district = ?';
-    params.push(district);
-  }
-
-  query += ' ORDER BY fl.createdAt DESC';
-
-  console.log('Query:', query);
-  console.log('Params:', params);
-
-  db.all(query, params, (err, listings) => {
+  
+  // First, let's check what's in the database
+  db.all('SELECT * FROM food_listings', [], (err, allListings) => {
     if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ error: 'İlanlar getirilemedi' });
+      console.error('Error getting all listings:', err);
+      return res.status(500).json({ error: 'Database error' });
     }
-    console.log('Found listings:', listings.length);
-    res.json(listings);
+    console.log('All listings in database:', allListings.length);
+    console.log('Sample listing:', allListings[0]);
+    
+    // Now get users
+    db.all('SELECT * FROM users', [], (err, allUsers) => {
+      if (err) {
+        console.error('Error getting all users:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      console.log('All users in database:', allUsers.length);
+      console.log('Sample user:', allUsers[0]);
+      
+      // Now do the actual query
+      let query = `
+        SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+        FROM food_listings fl
+        JOIN users u ON fl.userId = u.id
+        WHERE fl.status = 'active'
+      `;
+      let params = [];
+
+      if (province) {
+        query += ' AND u.province = ?';
+        params.push(province);
+      }
+      if (district) {
+        query += ' AND u.district = ?';
+        params.push(district);
+      }
+
+      query += ' ORDER BY fl.createdAt DESC';
+
+      console.log('Query:', query);
+      console.log('Params:', params);
+
+      db.all(query, params, (err, listings) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ error: 'İlanlar getirilemedi' });
+        }
+        console.log('Found listings:', listings.length);
+        console.log('Sample result:', listings[0]);
+        res.json(listings);
+      });
+    });
   });
 });
 
@@ -463,24 +486,45 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
 app.get('/api/my-listings', authenticateToken, (req, res) => {
   console.log('My listings requested for user:', req.user.id);
   
-  const query = `
-    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-    FROM food_listings fl
-    JOIN users u ON fl.userId = u.id
-    WHERE fl.userId = ?
-    ORDER BY fl.createdAt DESC
-  `;
-  
-  console.log('Query:', query);
-  console.log('User ID:', req.user.id);
-  
-  db.all(query, [req.user.id], (err, listings) => {
+  // First, let's check what's in the database for this user
+  db.all('SELECT * FROM food_listings WHERE userId = ?', [req.user.id], (err, userListings) => {
     if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ error: 'İlanlar getirilemedi' });
+      console.error('Error getting user listings:', err);
+      return res.status(500).json({ error: 'Database error' });
     }
-    console.log('Found my listings:', listings.length);
-    res.json(listings);
+    console.log('User listings in database:', userListings.length);
+    console.log('Sample user listing:', userListings[0]);
+    
+    // Now get user info
+    db.get('SELECT * FROM users WHERE id = ?', [req.user.id], (err, user) => {
+      if (err) {
+        console.error('Error getting user:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      console.log('User info:', user);
+      
+      // Now do the actual query
+      const query = `
+        SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+        FROM food_listings fl
+        JOIN users u ON fl.userId = u.id
+        WHERE fl.userId = ?
+        ORDER BY fl.createdAt DESC
+      `;
+      
+      console.log('Query:', query);
+      console.log('User ID:', req.user.id);
+      
+      db.all(query, [req.user.id], (err, listings) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ error: 'İlanlar getirilemedi' });
+        }
+        console.log('Found my listings:', listings.length);
+        console.log('Sample result:', listings[0]);
+        res.json(listings);
+      });
+    });
   });
 });
 
