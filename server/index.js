@@ -20,8 +20,14 @@ app.use(express.static(path.join(__dirname, '../client/build')));
 // Database setup
 const db = new sqlite3.Database('./azik.db');
 
-// Create tables
+// Create tables and clear all data
 db.serialize(() => {
+  // Drop existing tables
+  db.run('DROP TABLE IF EXISTS notifications');
+  db.run('DROP TABLE IF EXISTS exchange_offers');
+  db.run('DROP TABLE IF EXISTS food_listings');
+  db.run('DROP TABLE IF EXISTS users');
+  
   // Users table
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -74,6 +80,8 @@ db.serialize(() => {
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users (id)
   )`);
+  
+  console.log('Database reset complete - all data cleared!');
 });
 
 // JWT Secret
@@ -292,60 +300,32 @@ app.delete('/api/listings/:listingId', authenticateToken, (req, res) => {
 
 // Get all active listings
 app.get('/api/listings', (req, res) => {
-  console.log('All listings requested with filters:', req.query);
   const { province, district } = req.query;
   
-  // First, let's check what's in the database
-  db.all('SELECT * FROM food_listings', [], (err, allListings) => {
+  let query = `
+    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+    FROM food_listings fl
+    JOIN users u ON fl.userId = u.id
+    WHERE fl.status = 'active'
+  `;
+  let params = [];
+
+  if (province) {
+    query += ' AND u.province = ?';
+    params.push(province);
+  }
+  if (district) {
+    query += ' AND u.district = ?';
+    params.push(district);
+  }
+
+  query += ' ORDER BY fl.createdAt DESC';
+
+  db.all(query, params, (err, listings) => {
     if (err) {
-      console.error('Error getting all listings:', err);
-      return res.status(500).json({ error: 'Database error' });
+      return res.status(500).json({ error: 'İlanlar getirilemedi' });
     }
-    console.log('All listings in database:', allListings.length);
-    console.log('Sample listing:', allListings[0]);
-    
-    // Now get users
-    db.all('SELECT * FROM users', [], (err, allUsers) => {
-      if (err) {
-        console.error('Error getting all users:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      console.log('All users in database:', allUsers.length);
-      console.log('Sample user:', allUsers[0]);
-      
-      // Now do the actual query
-      let query = `
-        SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-        FROM food_listings fl
-        JOIN users u ON fl.userId = u.id
-        WHERE fl.status = 'active'
-      `;
-      let params = [];
-
-      if (province) {
-        query += ' AND u.province = ?';
-        params.push(province);
-      }
-      if (district) {
-        query += ' AND u.district = ?';
-        params.push(district);
-      }
-
-      query += ' ORDER BY fl.createdAt DESC';
-
-      console.log('Query:', query);
-      console.log('Params:', params);
-
-      db.all(query, params, (err, listings) => {
-        if (err) {
-          console.error('Database error:', err);
-          return res.status(500).json({ error: 'İlanlar getirilemedi' });
-        }
-        console.log('Found listings:', listings.length);
-        console.log('Sample result:', listings[0]);
-        res.json(listings);
-      });
-    });
+    res.json(listings);
   });
 });
 
@@ -354,8 +334,6 @@ app.post('/api/offers', authenticateToken, (req, res) => {
   const { listingId } = req.body;
   const offererId = req.user.id;
 
-  console.log('Offer creation request:', { listingId, offererId, user: req.user.firstName });
-
   if (!listingId) {
     return res.status(400).json({ error: 'İlan ID zorunludur' });
   }
@@ -363,11 +341,8 @@ app.post('/api/offers', authenticateToken, (req, res) => {
   // Check if listing exists and is active
   db.get('SELECT * FROM food_listings WHERE id = ? AND status = "active"', [listingId], (err, listing) => {
     if (err || !listing) {
-      console.log('Listing not found or not active:', listingId);
       return res.status(404).json({ error: 'İlan bulunamadı' });
     }
-
-    console.log('Found listing:', { id: listing.id, userId: listing.userId, foodName: listing.foodName });
 
     if (listing.userId === offererId) {
       return res.status(400).json({ error: 'Kendi ilanınıza teklif veremezsiniz' });
@@ -376,28 +351,22 @@ app.post('/api/offers', authenticateToken, (req, res) => {
     // Check if user already made an offer
     db.get('SELECT * FROM exchange_offers WHERE listingId = ? AND offererId = ?', [listingId, offererId], (err, existingOffer) => {
       if (err) {
-        console.error('Error checking existing offer:', err);
         return res.status(500).json({ error: 'Sunucu hatası' });
       }
 
       if (existingOffer) {
-        console.log('User already made an offer to this listing');
         return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
       }
 
       const offerId = uuidv4();
-      console.log('Creating new offer with ID:', offerId);
 
       db.run(
         'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
         [offerId, listingId, offererId],
         function(err) {
           if (err) {
-            console.error('Error creating offer:', err);
             return res.status(500).json({ error: 'Teklif oluşturulamadı' });
           }
-          
-          console.log('Offer created successfully, creating notification for user:', listing.userId);
           
           // Create notification for listing owner
           createNotification(
@@ -484,47 +453,19 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
 
 // Get user's listings
 app.get('/api/my-listings', authenticateToken, (req, res) => {
-  console.log('My listings requested for user:', req.user.id);
+  const query = `
+    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+    FROM food_listings fl
+    JOIN users u ON fl.userId = u.id
+    WHERE fl.userId = ?
+    ORDER BY fl.createdAt DESC
+  `;
   
-  // First, let's check what's in the database for this user
-  db.all('SELECT * FROM food_listings WHERE userId = ?', [req.user.id], (err, userListings) => {
+  db.all(query, [req.user.id], (err, listings) => {
     if (err) {
-      console.error('Error getting user listings:', err);
-      return res.status(500).json({ error: 'Database error' });
+      return res.status(500).json({ error: 'İlanlar getirilemedi' });
     }
-    console.log('User listings in database:', userListings.length);
-    console.log('Sample user listing:', userListings[0]);
-    
-    // Now get user info
-    db.get('SELECT * FROM users WHERE id = ?', [req.user.id], (err, user) => {
-      if (err) {
-        console.error('Error getting user:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      console.log('User info:', user);
-      
-      // Now do the actual query
-      const query = `
-        SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-        FROM food_listings fl
-        JOIN users u ON fl.userId = u.id
-        WHERE fl.userId = ?
-        ORDER BY fl.createdAt DESC
-      `;
-      
-      console.log('Query:', query);
-      console.log('User ID:', req.user.id);
-      
-      db.all(query, [req.user.id], (err, listings) => {
-        if (err) {
-          console.error('Database error:', err);
-          return res.status(500).json({ error: 'İlanlar getirilemedi' });
-        }
-        console.log('Found my listings:', listings.length);
-        console.log('Sample result:', listings[0]);
-        res.json(listings);
-      });
-    });
+    res.json(listings);
   });
 });
 
@@ -549,8 +490,6 @@ app.get('/api/my-offers', authenticateToken, (req, res) => {
 
 // Get offers for user's listings
 app.get('/api/listing-offers', authenticateToken, (req, res) => {
-  console.log('Listing offers requested for user:', req.user.id);
-  
   const query = `
     SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
     FROM exchange_offers eo
@@ -559,13 +498,11 @@ app.get('/api/listing-offers', authenticateToken, (req, res) => {
     WHERE fl.userId = ?
     ORDER BY eo.createdAt DESC
   `;
-  
+   
   db.all(query, [req.user.id], (err, offers) => {
     if (err) {
-      console.error('Database error:', err);
       return res.status(500).json({ error: 'Teklifler getirilemedi' });
     }
-    console.log('Found offers:', offers.length);
     res.json(offers);
   });
 });
@@ -690,22 +627,77 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
   const { province, district } = req.params;
   // Mock neighborhoods - in real app, this would come from a database
   const neighborhoods = {
-    // İstanbul Mahalleleri
-    'İstanbul-Kadıköy': ['Fenerbahçe', 'Caddebostan', 'Suadiye', 'Bağdat Caddesi', 'Göztepe', 'Erenköy', 'Bostancı', 'Hasanpaşa', 'Osmanağa', 'Rasimpaşa', '19 Mayıs', 'Zühtüpaşa', 'Merdivenköy', 'Koşuyolu', 'Sahrayıcedit'],
-    'İstanbul-Beşiktaş': ['Levent', 'Etiler', 'Bebek', 'Ortaköy', 'Arnavutköy', 'Gayrettepe', 'Yıldız', 'Vişnezade', 'Sinanpaşa', 'Muradiye', 'Nispetiye', 'Türkali', 'Dikilitaş', 'Abbasağa', 'Mecidiye'],
-    'İstanbul-Şişli': ['Nişantaşı', 'Teşvikiye', 'Maçka', 'Mecidiyeköy', 'Gültepe', 'Esentepe', 'Feriköy', 'Kurtuluş', 'Bomonti', 'Pangaltı', 'Harbiye', 'Halaskargazi', 'Meşrutiyet', 'Halide Edip Adıvar'],
-    'İstanbul-Beyoğlu': ['Taksim', 'Galata', 'Karaköy', 'Cihangir', 'Beyoğlu', 'Kuledibi', 'Kemankeş', 'Kılıçali Paşa', 'Tomtom', 'Asmalımescit', 'Kalyoncukulluk', 'Pürtelaş', 'Hacıahmet', 'Kemankeş Karamustafapaşa'],
-    'İstanbul-Fatih': ['Sultanahmet', 'Eminönü', 'Beyazıt', 'Aksaray', 'Vefa', 'Süleymaniye', 'Balat', 'Fener', 'Ayvansaray', 'Yavuz Sultan Selim', 'Hırka-i Şerif', 'Muhsine Hatun', 'Karagümrük', 'Kocamustafapaşa'],
-    'İstanbul-Üsküdar': ['Acıbadem', 'Altunizade', 'Bağlarbaşı', 'Kuzguncuk', 'Çengelköy', 'Beylerbeyi', 'Küçüksu', 'Kandilli', 'Vaniköy', 'Büyükçamlıca', 'Küçükçamlıca', 'Fethi Paşa', 'Mihrimah Sultan', 'Ahmediye', 'İcadiye'],
-    'İstanbul-Sarıyer': ['Sarıyer', 'Tarabya', 'Yeniköy', 'Büyükdere', 'Rumeli Hisarı', 'Emirgan', 'İstinye', 'Reşitpaşa', 'Darüşşafaka', 'Pınar', 'Kireçburnu', 'Kumköy', 'Baltalimanı', 'Maslak', 'Ayazağa'],
-    'İstanbul-Bakırköy': ['Bakırköy', 'Yeşilköy', 'Florya', 'Ataköy', 'Zeytinburnu', 'Kartaltepe', 'Osmaniye', 'Cevizlik', 'Kartaltepe', 'Şenlikköy', 'Basınköy', 'Fenerbahçe', 'Merter', 'Güngören'],
-    'İstanbul-Kartal': ['Kartal', 'Pendik', 'Maltepe', 'Ataşehir', 'Kadıköy', 'Soğanlık', 'Uğur Mumcu', 'Yalı', 'Orhantepe', 'Dragos', 'Fenerbahçe', 'Yenişehir', 'Gülsuyu', 'Esentepe'],
-    'İstanbul-Maltepe': ['Maltepe', 'Kartal', 'Pendik', 'Ataşehir', 'Kadıköy', 'Feyzullah', 'Başıbüyük', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Fındıklı', 'Gülensu', 'İdealtepe', 'Küçükyalı'],
-    'İstanbul-Ataşehir': ['Ataşehir', 'Kadıköy', 'Maltepe', 'Kartal', 'Pendik', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana'],
-    'İstanbul-Ümraniye': ['Ümraniye', 'Kadıköy', 'Ataşehir', 'Maltepe', 'Kartal', 'Atakent', 'Çakmak', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Tantavi'],
-    'İstanbul-Başakşehir': ['Başakşehir', 'Esenyurt', 'Avcılar', 'Küçükçekmece', 'Sultangazi', 'Başak', 'Kayabaşı', 'Şahintepe', 'Altınşehir', 'Bahçeşehir', 'Güvercintepe', 'Ziya Gökalp', 'Mehmet Akif Ersoy', 'Orhan Gazi'],
-    'İstanbul-Esenyurt': ['Esenyurt', 'Avcılar', 'Küçükçekmece', 'Başakşehir', 'Beylikdüzü', 'Ardıçlı', 'Aşık Veysel', 'Atatürk', 'Cumhuriyet', 'Fatih', 'Gökevler', 'İnönü', 'İnşaat', 'Kıraç', 'Mehterçeşme'],
-    'İstanbul-Beylikdüzü': ['Beylikdüzü', 'Esenyurt', 'Avcılar', 'Küçükçekmece', 'Büyükçekmece', 'Adnan Kahveci', 'Barış', 'Büyükşehir', 'Cumhuriyet', 'Dereağzı', 'Gürpınar', 'Marmara', 'Sahil', 'Yakuplu'],
+         // İstanbul Mahalleleri - Kadıköy
+     'İstanbul-Kadıköy': ['Fenerbahçe', 'Caddebostan', 'Suadiye', 'Bağdat Caddesi', 'Göztepe', 'Erenköy', 'Bostancı', 'Hasanpaşa', 'Osmanağa', 'Rasimpaşa', '19 Mayıs', 'Zühtüpaşa', 'Merdivenköy', 'Koşuyolu', 'Sahrayıcedit', 'Fikirtepe', 'Hasanpaşa', 'Kayışdağı', 'Uzunçayır', 'Yenisahra', 'Ataşehir', 'İçerenköy', 'Küçükbakkalköy', 'Bostancı', 'Eğitim', 'Fenerbahçe', 'Fikirtepe', 'Hasanpaşa', 'Kayışdağı', 'Merdivenköy', 'Osmanağa', 'Rasimpaşa', 'Sahrayıcedit', 'Suadiye', 'Zühtüpaşa'],
+     
+     // İstanbul Mahalleleri - Beşiktaş
+     'İstanbul-Beşiktaş': ['Levent', 'Etiler', 'Bebek', 'Ortaköy', 'Arnavutköy', 'Gayrettepe', 'Yıldız', 'Vişnezade', 'Sinanpaşa', 'Muradiye', 'Nispetiye', 'Türkali', 'Dikilitaş', 'Abbasağa', 'Mecidiye', 'Akat', 'Balmumcu', 'Bebek', 'Etiler', 'Gayrettepe', 'Levent', 'Mecidiye', 'Muradiye', 'Nispetiye', 'Ortaköy', 'Sinanpaşa', 'Türkali', 'Vişnezade', 'Yıldız'],
+     
+     // İstanbul Mahalleleri - Şişli
+     'İstanbul-Şişli': ['Nişantaşı', 'Teşvikiye', 'Maçka', 'Mecidiyeköy', 'Gültepe', 'Esentepe', 'Feriköy', 'Kurtuluş', 'Bomonti', 'Pangaltı', 'Harbiye', 'Halaskargazi', 'Meşrutiyet', 'Halide Edip Adıvar', '19 Mayıs', 'Ayazağa', 'Bozkurt', 'Cumhuriyet', 'Duatepe', 'Ergenekon', 'Esentepe', 'Feriköy', 'Fulya', 'Gülbağ', 'Gültepe', 'Halaskargazi', 'Harbiye', 'İnönü', 'Kaptanpaşa', 'Kuştepe', 'Mahmutşevketpaşa', 'Maslak', 'Mecidiyeköy', 'Meşrutiyet', 'Nişantaşı', 'Okmeydanı', 'Pangaltı', 'Poligon', 'Teşvikiye', 'Yayla'],
+     
+     // İstanbul Mahalleleri - Beyoğlu
+     'İstanbul-Beyoğlu': ['Taksim', 'Galata', 'Karaköy', 'Cihangir', 'Beyoğlu', 'Kuledibi', 'Kemankeş', 'Kılıçali Paşa', 'Tomtom', 'Asmalımescit', 'Kalyoncukulluk', 'Pürtelaş', 'Hacıahmet', 'Kemankeş Karamustafapaşa', 'Arap Cami', 'Asmalımescit', 'Bedrettin', 'Bereketzade', 'Bostan', 'Bülbül', 'Camiikebir', 'Cihangir', 'Çatma Mescit', 'Çukur', 'Emekyemez', 'Evliya Çelebi', 'Fetihtepe', 'Firuzağa', 'Gümüşsuyu', 'Hacıahmet', 'Hacımimi', 'Halıcıoğlu', 'Hüseyinağa', 'İstiklal', 'Kadımehmet Efendi', 'Kalyoncukulluk', 'Kamerhatun', 'Karaköy', 'Kemankeş', 'Kılıçali Paşa', 'Kocatepe', 'Kulaksız', 'Kuloğlu', 'Küçük Piyale', 'Müeyyetzade', 'Ömeravni', 'Örnektepe', 'Piripaşa', 'Piyalepaşa', 'Pürtelaş', 'Şahkulu', 'Şehit Muhtar', 'Şişhane', 'Sütlüce', 'Taksim', 'Tarlabaşı', 'Tophane', 'Yenişehir'],
+     
+     // İstanbul Mahalleleri - Fatih
+     'İstanbul-Fatih': ['Sultanahmet', 'Eminönü', 'Beyazıt', 'Aksaray', 'Vefa', 'Süleymaniye', 'Balat', 'Fener', 'Ayvansaray', 'Yavuz Sultan Selim', 'Hırka-i Şerif', 'Muhsine Hatun', 'Karagümrük', 'Kocamustafapaşa', 'Aksaray', 'Akşemsettin', 'Alemdar', 'Ali Kuşçu', 'Atikali', 'Ayvansaray', 'Balabanağa', 'Balat', 'Beyazıt', 'Binbirdirek', 'Cankurtaran', 'Cerrahpaşa', 'Cibali', 'Demirtaş', 'Derviş Ali', 'Emin Sinan', 'Eminönü', 'Eski İmaret', 'Evkaf', 'Fener', 'Hacı Kadın', 'Haseki Sultan', 'Hırka-i Şerif', 'Hobyar', 'Hoca Gıyasettin', 'Hocapaşa', 'İskenderpaşa', 'Kalenderhane', 'Karagümrük', 'Katip Kasım', 'Kemalpaşa', 'Küçük Ayasofya', 'Küçük Mustafapaşa', 'Mercan', 'Mesihpaşa', 'Mevlanakapı', 'Mihrimah Sultan', 'Molla Fenari', 'Molla Gürani', 'Molla Hüsrev', 'Muhsine Hatun', 'Nişanca', 'Rüstempaşa', 'Saraç İshak', 'Sar Demirci', 'Seyyid Ömer', 'Silivrikapı', 'Sultanahmet', 'Sururi', 'Süleymaniye', 'Şehremini', 'Şehsuvar Bey', 'Tahtakale', 'Tayahatun', 'Topkapı', 'Yavuz Sinan', 'Yavuz Sultan Selim', 'Yedikule', 'Zeyrek'],
+     
+     // İstanbul Mahalleleri - Üsküdar
+     'İstanbul-Üsküdar': ['Acıbadem', 'Altunizade', 'Bağlarbaşı', 'Kuzguncuk', 'Çengelköy', 'Beylerbeyi', 'Küçüksu', 'Kandilli', 'Vaniköy', 'Büyükçamlıca', 'Küçükçamlıca', 'Fethi Paşa', 'Mihrimah Sultan', 'Ahmediye', 'İcadiye', 'Ahmediye', 'Altunizade', 'Aziz Mahmut Hüdayi', 'Bahçelievler', 'Barbaros', 'Beylerbeyi', 'Bulgurlu', 'Burhaniye', 'Cumhuriyet', 'Çengelköy', 'Ferah', 'Güzeltepe', 'Havuzbaşı', 'İcadiye', 'İhsaniye', 'Kandilli', 'Kirazlıtepe', 'Kısıklı', 'Küçükçamlıca', 'Küçüksu', 'Kuzguncuk', 'Mimar Sinan', 'Murat Reis', 'Örnek', 'Paşalimanı', 'Rum Mehmet Paşa', 'Selamiali', 'Selimiye', 'Sultantepe', 'Şemsipaşa', 'Tavusantepe', 'Ünalan', 'Valide-i Atik', 'Yavuztürk', 'Zeynep Kamil'],
+     
+     // İstanbul Mahalleleri - Sarıyer
+     'İstanbul-Sarıyer': ['Sarıyer', 'Tarabya', 'Yeniköy', 'Büyükdere', 'Rumeli Hisarı', 'Emirgan', 'İstinye', 'Reşitpaşa', 'Darüşşafaka', 'Pınar', 'Kireçburnu', 'Kumköy', 'Baltalimanı', 'Maslak', 'Ayazağa', 'Ayazağa', 'Baltalimanı', 'Büyükdere', 'Cumhuriyet', 'Çayırbaşı', 'Darüşşafaka', 'Demirtaş', 'Emirgan', 'Ferahevler', 'Gümüşdere', 'İstinye', 'Kireçburnu', 'Kumköy', 'Kuzguncuk', 'Maslak', 'Pınar', 'Poligon', 'Reşitpaşa', 'Rumeli Hisarı', 'Rumeli Kavağı', 'Sarıyer', 'Tarabya', 'Yeniköy'],
+     
+     // İstanbul Mahalleleri - Bakırköy
+     'İstanbul-Bakırköy': ['Bakırköy', 'Yeşilköy', 'Florya', 'Ataköy', 'Zeytinburnu', 'Kartaltepe', 'Osmaniye', 'Cevizlik', 'Kartaltepe', 'Şenlikköy', 'Basınköy', 'Fenerbahçe', 'Merter', 'Güngören', 'Ataköy', 'Basınköy', 'Cevizlik', 'Fenerbahçe', 'Florya', 'İncirli', 'Kartaltepe', 'Osmaniye', 'Örnek', 'Sakızağacı', 'Şenlikköy', 'Yenimahalle', 'Yeşilköy', 'Yeşilyurt', 'Zeytinlik'],
+     
+     // İstanbul Mahalleleri - Kartal
+     'İstanbul-Kartal': ['Kartal', 'Pendik', 'Maltepe', 'Ataşehir', 'Kadıköy', 'Soğanlık', 'Uğur Mumcu', 'Yalı', 'Orhantepe', 'Dragos', 'Fenerbahçe', 'Yenişehir', 'Gülsuyu', 'Esentepe', 'Atalar', 'Cevizli', 'Dragos', 'Esentepe', 'Gülsuyu', 'Hürriyet', 'Karlık', 'Kartal', 'Orhantepe', 'Soğanlık', 'Topselvi', 'Uğur Mumcu', 'Yalı', 'Yenişehir'],
+     
+     // İstanbul Mahalleleri - Maltepe
+     'İstanbul-Maltepe': ['Maltepe', 'Kartal', 'Pendik', 'Ataşehir', 'Kadıköy', 'Feyzullah', 'Başıbüyük', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Fındıklı', 'Gülensu', 'İdealtepe', 'Küçükyalı', 'Altayçeşme', 'Bağdat Caddesi', 'Başıbüyük', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Feyzullah', 'Fındıklı', 'Girne', 'Gülensu', 'Gülsuyu', 'İdealtepe', 'Küçükyalı', 'Yalı'],
+     
+     // İstanbul Mahalleleri - Ataşehir
+     'İstanbul-Ataşehir': ['Ataşehir', 'Kadıköy', 'Maltepe', 'Kartal', 'Pendik', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir'],
+     
+     // İstanbul Mahalleleri - Ümraniye
+     'İstanbul-Ümraniye': ['Ümraniye', 'Kadıköy', 'Ataşehir', 'Maltepe', 'Kartal', 'Atakent', 'Çakmak', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Tantavi', 'Adem Yavuz', 'Atakent', 'Atatürk', 'Çakmak', 'Esenkent', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Necip Fazıl', 'Parseller', 'Tantavi', 'Yenişehir'],
+     
+     // İstanbul Mahalleleri - Başakşehir
+     'İstanbul-Başakşehir': ['Başakşehir', 'Esenyurt', 'Avcılar', 'Küçükçekmece', 'Sultangazi', 'Başak', 'Kayabaşı', 'Şahintepe', 'Altınşehir', 'Bahçeşehir', 'Güvercintepe', 'Ziya Gökalp', 'Mehmet Akif Ersoy', 'Orhan Gazi', 'Altınşehir', 'Bahçeşehir', 'Başak', 'Güvercintepe', 'Kayabaşı', 'Mehmet Akif Ersoy', 'Orhan Gazi', 'Şahintepe', 'Ziya Gökalp'],
+     
+     // İstanbul Mahalleleri - Esenyurt
+     'İstanbul-Esenyurt': ['Esenyurt', 'Avcılar', 'Küçükçekmece', 'Başakşehir', 'Beylikdüzü', 'Ardıçlı', 'Aşık Veysel', 'Atatürk', 'Cumhuriyet', 'Fatih', 'Gökevler', 'İnönü', 'İnşaat', 'Kıraç', 'Mehterçeşme', 'Ardıçlı', 'Aşık Veysel', 'Atatürk', 'Cumhuriyet', 'Fatih', 'Gökevler', 'İnönü', 'İnşaat', 'Kıraç', 'Mehterçeşme', 'Namık Kemal', 'Örnek', 'Pınar', 'Saadetdere', 'Sanayi', 'Şehirlerarası', 'Yenikent'],
+     
+     // İstanbul Mahalleleri - Beylikdüzü
+     'İstanbul-Beylikdüzü': ['Beylikdüzü', 'Esenyurt', 'Avcılar', 'Küçükçekmece', 'Büyükçekmece', 'Adnan Kahveci', 'Barış', 'Büyükşehir', 'Cumhuriyet', 'Dereağzı', 'Gürpınar', 'Marmara', 'Sahil', 'Yakuplu', 'Adnan Kahveci', 'Barış', 'Büyükşehir', 'Cumhuriyet', 'Dereağzı', 'Gürpınar', 'Marmara', 'Sahil', 'Yakuplu'],
+     
+     // İstanbul Mahalleleri - Diğer İlçeler
+     'İstanbul-Avcılar': ['Ambarlı', 'Denizköşkler', 'Firuzköy', 'Gümüşpala', 'Merkez', 'Mustafa Kemal Paşa', 'Tahtakale', 'Üniversite', 'Yeşilkent'],
+     'İstanbul-Küçükçekmece': ['Atakent', 'Beşyol', 'Cennet', 'Cumhuriyet', 'Fatih', 'Fevzi Çakmak', 'Gültepe', 'Halkalı', 'İkitelli', 'İnönü', 'Kanarya', 'Kartaltepe', 'Söğütlüçeşme', 'Sultanmurat', 'Tepeüstü', 'Yarımburgaz', 'Yenişehir'],
+     'İstanbul-Sultangazi': ['50. Yıl', '75. Yıl', 'Cebeci', 'Cumhuriyet', 'Esentepe', 'Eskişehir', 'Gazi', 'Habibler', 'İsmetpaşa', 'Malkoçoğlu', 'Necip Fazıl', 'Sultançiftliği', 'Uğur Mumcu', 'Yayla', 'Yenişehir'],
+     'İstanbul-Büyükçekmece': ['Ahmediye', 'Alkent', 'Atatürk', 'Bahçelievler', 'Beylikdüzü', 'Cumhuriyet', 'Çakmaklı', 'Dizdariye', 'Esenyurt', 'Fatih', 'Gürpınar', 'Kale', 'Kıraç', 'Marmara', 'Mimaroba', 'Sultaniye', 'Yakuplu'],
+     'İstanbul-Çatalca': ['Binkılıç', 'Çanakça', 'Çatalca', 'Elbasan', 'Ferhatpaşa', 'Gökçeali', 'Gümüşpınar', 'Hallaçlı', 'İhsaniye', 'İnceğiz', 'Kaleiçi', 'Kestanelik', 'Kızılcaali', 'Muhacir', 'Örcünlü', 'Örencik', 'Subaşı', 'Yalıköy', 'Yaylacık'],
+     'İstanbul-Çekmeköy': ['Alemdağ', 'Ataşehir', 'Çekmeköy', 'Ekşioğlu', 'Göktürk', 'Hamidiye', 'Hüseyinli', 'Kirazlıdere', 'Mehmet Akif', 'Merkez', 'Mihrimah Sultan', 'Nişantepe', 'Ömerli', 'Soğukpınar', 'Sultançiftliği', 'Taşdelen', 'Ümraniye'],
+     'İstanbul-Esenler': ['Atışalanı', 'Birlik', 'Davutpaşa', 'Esenler', 'Fatih', 'Havaalanı', 'Kazım Karabekir', 'Menderes', 'Namık Kemal', 'Nine Hatun', 'Oruçreis', 'Turgutreis', 'Yavuz Selim'],
+     'İstanbul-Esenyurt': ['Ardıçlı', 'Aşık Veysel', 'Atatürk', 'Cumhuriyet', 'Fatih', 'Gökevler', 'İnönü', 'İnşaat', 'Kıraç', 'Mehterçeşme', 'Namık Kemal', 'Örnek', 'Pınar', 'Saadetdere', 'Sanayi', 'Şehirlerarası', 'Yenikent'],
+     'İstanbul-Eyüpsultan': ['Ağaçlı', 'Akpınar', 'Alibeyköy', 'Arnavutköy', 'Aşağı', 'Başak', 'Boyacı', 'Çırçır', 'Düğmeciler', 'Emniyettepe', 'Esentepe', 'Eyüp', 'Feshane', 'Göktürk', 'Güzeltepe', 'İslambey', 'Karadolap', 'Kemerburgaz', 'Mimar Sinan', 'Nişanca', 'Odayeri', 'Pirinççi', 'Rami Cuma', 'Rami Yeni', 'Sakarya', 'Silahtarağa', 'Topçular', 'Yenidoğan', 'Yenimahalle'],
+     'İstanbul-Fatih': ['Aksaray', 'Akşemsettin', 'Alemdar', 'Ali Kuşçu', 'Atikali', 'Ayvansaray', 'Balabanağa', 'Balat', 'Beyazıt', 'Binbirdirek', 'Cankurtaran', 'Cerrahpaşa', 'Cibali', 'Demirtaş', 'Derviş Ali', 'Emin Sinan', 'Eminönü', 'Eski İmaret', 'Evkaf', 'Fener', 'Hacı Kadın', 'Haseki Sultan', 'Hırka-i Şerif', 'Hobyar', 'Hoca Gıyasettin', 'Hocapaşa', 'İskenderpaşa', 'Kalenderhane', 'Karagümrük', 'Katip Kasım', 'Kemalpaşa', 'Küçük Ayasofya', 'Küçük Mustafapaşa', 'Mercan', 'Mesihpaşa', 'Mevlanakapı', 'Mihrimah Sultan', 'Molla Fenari', 'Molla Gürani', 'Molla Hüsrev', 'Muhsine Hatun', 'Nişanca', 'Rüstempaşa', 'Saraç İshak', 'Sar Demirci', 'Seyyid Ömer', 'Silivrikapı', 'Sultanahmet', 'Sururi', 'Süleymaniye', 'Şehremini', 'Şehsuvar Bey', 'Tahtakale', 'Tayahatun', 'Topkapı', 'Yavuz Sinan', 'Yavuz Sultan Selim', 'Yedikule', 'Zeyrek'],
+     'İstanbul-Gaziosmanpaşa': ['Adnan Menderes', 'Arnavutköy', 'Bağlarbaşı', 'Barbaros Hayrettin Paşa', 'Fevzi Çakmak', 'Hürriyet', 'İsmetpaşa', 'Kale', 'Karagümrük', 'Karlıtepe', 'Kazım Karabekir', 'Mevlana', 'Pazariçi', 'Sarıgöl', 'Şemsipaşa', 'Yenidoğan', 'Yenimahalle', 'Yıldıztabya'],
+     'İstanbul-Güngören': ['Akıncılar', 'Gençosman', 'Güneştepe', 'Güven', 'Haznedar', 'Mareşal Çakmak', 'Sanayi', 'Tozkoparan'],
+     'İstanbul-Kağıthane': ['Çağlayan', 'Çeliktepe', 'Emniyetevleri', 'Gültepe', 'Gürsel', 'Hamidiye', 'Harmantepe', 'Hürriyet', 'Mehmet Akif Ersoy', 'Merkez', 'Nurtepe', 'Ortabayır', 'Seyrantepe', 'Şirintepe', 'Talatpaşa', 'Telsizler', 'Yahya Kemal', 'Yeşilce'],
+     'İstanbul-Pendik': ['Ahmet Yesevi', 'Bahçelievler', 'Batı', 'Çamçeşme', 'Çınardere', 'Doğu', 'Dumlupınar', 'Ertuğrul Gazi', 'Esenler', 'Fevzi Çakmak', 'Güllübağlar', 'Güzelyalı', 'Harmandere', 'İstiklal', 'Kurtköy', 'Orhangazi', 'Orta', 'Ramazanoğlu', 'Sanayi', 'Sapanbağları', 'Sülüntepe', 'Şeyhli', 'Velibaba', 'Yayalar', 'Yenişehir'],
+     'İstanbul-Sancaktepe': ['Abdurrahmangazi', 'Akpınar', 'Atatürk', 'Emek', 'Eyüp Sultan', 'Fatih', 'Hilal', 'İnönü', 'Kemal Türkler', 'Meclis', 'Merve', 'Mevlana', 'Osmangazi', 'Paşaköy', 'Safa', 'Sarıgazi', 'Veysel Karani', 'Yenidoğan'],
+     'İstanbul-Sarıyer': ['Ayazağa', 'Baltalimanı', 'Büyükdere', 'Cumhuriyet', 'Çayırbaşı', 'Darüşşafaka', 'Demirtaş', 'Emirgan', 'Ferahevler', 'Gümüşdere', 'İstinye', 'Kireçburnu', 'Kumköy', 'Kuzguncuk', 'Maslak', 'Pınar', 'Poligon', 'Reşitpaşa', 'Rumeli Hisarı', 'Rumeli Kavağı', 'Sarıyer', 'Tarabya', 'Yeniköy'],
+     'İstanbul-Silivri': ['Alibey', 'Alipaşa', 'Balıklıoğlu', 'Büyükçavuşlu', 'Cumhuriyet', 'Değirmenköy', 'Fatih', 'Fenerköy', 'Gümüşyaka', 'Kadıköy', 'Kavaklı', 'Küçükçavuşlu', 'Mimar Sinan', 'Ortaköy', 'Piri Mehmet Paşa', 'Selimpaşa', 'Seymen', 'Yeni', 'Yolçatı'],
+     'İstanbul-Sultanbeyli': ['Abdurrahmangazi', 'Adil', 'Ahmet Yesevi', 'Akşemsettin', 'Battalgazi', 'Fatih', 'Hasanpaşa', 'Mecidiye', 'Mehmet Akif', 'Mimar Sinan', 'Necip Fazıl', 'Orhangazi', 'Turgut Reis', 'Yavuz Selim'],
+     'İstanbul-Sultangazi': ['50. Yıl', '75. Yıl', 'Cebeci', 'Cumhuriyet', 'Esentepe', 'Eskişehir', 'Gazi', 'Habibler', 'İsmetpaşa', 'Malkoçoğlu', 'Necip Fazıl', 'Sultançiftliği', 'Uğur Mumcu', 'Yayla', 'Yenişehir'],
+     'İstanbul-Şile': ['Ağva', 'Balibey', 'Çavuş', 'Hacıllı', 'Kumbaba', 'Şile'],
+     'İstanbul-Şişli': ['19 Mayıs', 'Ayazağa', 'Bozkurt', 'Cumhuriyet', 'Duatepe', 'Ergenekon', 'Esentepe', 'Feriköy', 'Fulya', 'Gülbağ', 'Gültepe', 'Halaskargazi', 'Harbiye', 'İnönü', 'Kaptanpaşa', 'Kuştepe', 'Mahmutşevketpaşa', 'Maslak', 'Mecidiyeköy', 'Meşrutiyet', 'Nişantaşı', 'Okmeydanı', 'Pangaltı', 'Poligon', 'Teşvikiye', 'Yayla'],
+     'İstanbul-Tuzla': ['Akfırat', 'Anadolu', 'Aydınlı', 'Çayırova', 'Denizli', 'Deri', 'Fatih', 'İçmeler', 'Mescit', 'Orhanlı', 'Postane', 'Şifa', 'Yayla'],
+     'İstanbul-Ümraniye': ['Adem Yavuz', 'Atakent', 'Atatürk', 'Çakmak', 'Esenkent', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Necip Fazıl', 'Parseller', 'Tantavi', 'Yenişehir'],
+     'İstanbul-Üsküdar': ['Acıbadem', 'Altunizade', 'Aziz Mahmut Hüdayi', 'Bahçelievler', 'Barbaros', 'Beylerbeyi', 'Bulgurlu', 'Burhaniye', 'Cumhuriyet', 'Çengelköy', 'Ferah', 'Güzeltepe', 'Havuzbaşı', 'İcadiye', 'İhsaniye', 'Kandilli', 'Kirazlıtepe', 'Kısıklı', 'Küçükçamlıca', 'Küçüksu', 'Kuzguncuk', 'Mimar Sinan', 'Murat Reis', 'Örnek', 'Paşalimanı', 'Rum Mehmet Paşa', 'Selamiali', 'Selimiye', 'Sultantepe', 'Şemsipaşa', 'Tavusantepe', 'Ünalan', 'Valide-i Atik', 'Yavuztürk', 'Zeynep Kamil'],
+     'İstanbul-Zeytinburnu': ['Beştelsiz', 'Çırpıcı', 'Gökalp', 'Kazlıçeşme', 'Maltepe', 'Merkezefendi', 'Nuripaşa', 'Seyitnizam', 'Telsiz', 'Veliefendi', 'Yenidoğan', 'Yeşiltepe'],
     
     // Ankara Mahalleleri
     'Ankara-Çankaya': ['Kızılay', 'Bahçelievler', 'Emek', 'Çayyolu', 'Ümitköy', 'Yıldız', 'Çankaya', 'Kurtuluş', 'Kurtuluş', 'Kurtuluş', 'Kurtuluş', 'Kurtuluş', 'Kurtuluş', 'Kurtuluş', 'Kurtuluş'],
