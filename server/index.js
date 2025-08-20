@@ -119,66 +119,99 @@ const validatePassword = (password) => {
   return password.length >= 8;
 };
 
-// Nodemailer transporter setup
-let transporter;
+// Email configuration
+let transporter = null;
+
 if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-  // Try Gmail first
-  transporter = nodemailer.createTransporter({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    },
-    secure: true,
-    port: 465,
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
+  console.log('Email credentials found, initializing transporter...');
+  console.log('Email user:', process.env.EMAIL_USER);
+  console.log('Email pass length:', process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0);
   
-  // Test the connection
-  transporter.verify(function(error, success) {
-    if (error) {
-      console.log('Gmail transporter verification failed:', error);
-      console.log('Trying alternative configuration...');
-      
-      // Try alternative Gmail configuration
-      transporter = nodemailer.createTransporter({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
-      });
-      
-      transporter.verify(function(error2, success2) {
-        if (error2) {
-          console.log('Alternative Gmail configuration also failed:', error2);
-        } else {
-          console.log('Alternative Gmail configuration successful');
-        }
-      });
-    } else {
-      console.log('Gmail transporter initialized and verified successfully');
+  // Try multiple Gmail configurations
+  const configs = [
+    {
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    },
+    {
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    },
+    {
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
     }
-  });
+  ];
+
+  let configIndex = 0;
+  
+  const tryConfig = () => {
+    if (configIndex >= configs.length) {
+      console.log('All email configurations failed');
+      return;
+    }
+    
+    const config = configs[configIndex];
+    console.log(`Trying email config ${configIndex + 1}:`, {
+      host: config.host || config.service,
+      port: config.port,
+      secure: config.secure
+    });
+    
+    transporter = nodemailer.createTransporter(config);
+    
+    transporter.verify(function(error, success) {
+      if (error) {
+        console.log(`Config ${configIndex + 1} failed:`, error.message);
+        configIndex++;
+        tryConfig();
+      } else {
+        console.log(`Email config ${configIndex + 1} successful!`);
+      }
+    });
+  };
+  
+  tryConfig();
 } else {
   console.log('Email credentials not found - email verification disabled');
+  console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET');
+  console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'SET' : 'NOT SET');
 }
 
 // Send verification email function
 const sendVerificationEmail = async (email, verificationToken) => {
+  console.log('=== EMAIL SENDING DEBUG ===');
+  console.log('Transporter available:', !!transporter);
+  console.log('Email to send to:', email);
+  console.log('Verification token:', verificationToken);
+  console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+  
   if (!transporter) {
-    console.log('Email transporter not available');
+    console.log('❌ Email transporter not available');
     return false;
   }
 
   const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+  console.log('Verification URL:', verificationUrl);
   
   const mailOptions = {
     from: process.env.EMAIL_USER,
@@ -213,21 +246,25 @@ const sendVerificationEmail = async (email, verificationToken) => {
   };
 
   try {
-    console.log('Attempting to send verification email to:', email);
-    console.log('Using verification URL:', verificationUrl);
+    console.log('📧 Attempting to send verification email...');
+    console.log('From:', process.env.EMAIL_USER);
+    console.log('To:', email);
     
     const result = await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent successfully to ${email}`);
+    console.log('✅ Verification email sent successfully to', email);
     console.log('Message ID:', result.messageId);
+    console.log('=== EMAIL SENDING SUCCESS ===');
     return true;
   } catch (error) {
-    console.error('Error sending verification email:', error);
+    console.error('❌ Error sending verification email:', error);
     console.error('Error details:', {
       code: error.code,
       command: error.command,
       response: error.response,
-      responseCode: error.responseCode
+      responseCode: error.responseCode,
+      message: error.message
     });
+    console.log('=== EMAIL SENDING FAILED ===');
     return false;
   }
 };
