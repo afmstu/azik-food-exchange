@@ -122,14 +122,51 @@ const validatePassword = (password) => {
 // Nodemailer transporter setup
 let transporter;
 if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  // Try Gmail first
   transporter = nodemailer.createTransporter({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
+    },
+    secure: true,
+    port: 465,
+    tls: {
+      rejectUnauthorized: false
     }
   });
-  console.log('Email transporter initialized');
+  
+  // Test the connection
+  transporter.verify(function(error, success) {
+    if (error) {
+      console.log('Gmail transporter verification failed:', error);
+      console.log('Trying alternative configuration...');
+      
+      // Try alternative Gmail configuration
+      transporter = nodemailer.createTransporter({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+      
+      transporter.verify(function(error2, success2) {
+        if (error2) {
+          console.log('Alternative Gmail configuration also failed:', error2);
+        } else {
+          console.log('Alternative Gmail configuration successful');
+        }
+      });
+    } else {
+      console.log('Gmail transporter initialized and verified successfully');
+    }
+  });
 } else {
   console.log('Email credentials not found - email verification disabled');
 }
@@ -176,11 +213,21 @@ const sendVerificationEmail = async (email, verificationToken) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent to ${email}`);
+    console.log('Attempting to send verification email to:', email);
+    console.log('Using verification URL:', verificationUrl);
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`Verification email sent successfully to ${email}`);
+    console.log('Message ID:', result.messageId);
     return true;
   } catch (error) {
     console.error('Error sending verification email:', error);
+    console.error('Error details:', {
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode
+    });
     return false;
   }
 };
@@ -509,6 +556,54 @@ app.post('/api/verify-email', async (req, res) => {
   } catch (error) {
     console.error('Email verification error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
+// Test email endpoint (for debugging)
+app.post('/api/test-email', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email || !validateEmail(email)) {
+      return res.status(400).json({ error: 'Geçerli bir e-posta adresi gerekli' });
+    }
+
+    if (!transporter) {
+      return res.status(500).json({ error: 'E-posta servisi yapılandırılmamış' });
+    }
+
+    const testMailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Azık - Test E-postası',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Test E-postası</h2>
+          <p>Bu bir test e-postasıdır. E-posta servisi çalışıyor.</p>
+          <p>Gönderen: ${process.env.EMAIL_USER}</p>
+          <p>Alıcı: ${email}</p>
+          <p>Tarih: ${new Date().toLocaleString('tr-TR')}</p>
+        </div>
+      `
+    };
+
+    const result = await transporter.sendMail(testMailOptions);
+    res.json({ 
+      success: true, 
+      message: 'Test e-postası başarıyla gönderildi',
+      messageId: result.messageId 
+    });
+  } catch (error) {
+    console.error('Test email error:', error);
+    res.status(500).json({ 
+      error: 'Test e-postası gönderilemedi',
+      details: {
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      }
+    });
   }
 });
 
