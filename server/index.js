@@ -177,7 +177,7 @@ if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
       secure: config.secure
     });
     
-    transporter = nodemailer.createTransporter(config);
+    transporter = nodemailer.createTransport(config);
     
     transporter.verify(function(error, success) {
       if (error) {
