@@ -644,20 +644,30 @@ app.get('/api/verify-email', async (req, res) => {
 
     // Check if token is expired
     if (new Date() > new Date(verification.expiresAt)) {
+      console.log('❌ Token expired');
       return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
     }
 
+    console.log('✅ Token is valid, proceeding with verification...');
+
     // Update user email verification status
+    console.log('🔄 Updating user verification status...');
     await dbRun('users', { isEmailVerified: true, updatedAt: new Date().toISOString() }, verification.userId);
+    console.log('✅ User verification status updated');
 
     // Delete the verification record
+    console.log('🗑️ Deleting verification record...');
     await db.collection('email_verifications').doc(verification.id).delete();
+    console.log('✅ Verification record deleted');
 
     // Get user info for token
+    console.log('👤 Getting user info...');
     const user = await dbGet('users', verification.userId);
+    console.log('✅ User info retrieved:', user ? 'User found' : 'User not found');
 
     // Redirect to frontend with success message
     const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?success=true`;
+    console.log('🔄 Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   } catch (error) {
     console.error('Email verification error:', error);
@@ -1528,6 +1538,36 @@ app.get('/api/debug-token/:token', async (req, res) => {
 // Catch all handler: send back React's index.html file for any non-API routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/build/index.html'));
+});
+
+// Debug endpoint to list all users
+app.get('/api/debug-users', async (req, res) => {
+  try {
+    const usersSnapshot = await db.collection('users').get();
+    const users = [];
+    
+    usersSnapshot.forEach(doc => {
+      users.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return res.json({
+      totalUsers: users.length,
+      users: users.map(user => ({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isEmailVerified: user.isEmailVerified,
+        createdAt: user.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Debug users error:', error);
+    res.status(500).json({ error: 'Debug error' });
+  }
 });
 
 app.listen(PORT, () => {
