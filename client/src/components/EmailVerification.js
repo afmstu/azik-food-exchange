@@ -14,11 +14,34 @@ function EmailVerification() {
 
   useEffect(() => {
     const token = searchParams.get('token');
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    
+    if (success === 'true' && token) {
+      // Server'dan redirect geldi, kullanıcıyı giriş yaptır
+      setVerificationStatus('success');
+      login(token);
+      toast.success('E-posta doğrulandı! Giriş yapıldı.');
+      
+      setTimeout(() => {
+        navigate('/');
+      }, 3000);
+      return;
+    }
+    
+    if (error) {
+      setVerificationStatus('error');
+      setErrorMessage('E-posta doğrulama işlemi başarısız oldu');
+      return;
+    }
+    
     if (!token) {
       setVerificationStatus('error');
       setErrorMessage('Doğrulama token\'ı bulunamadı');
       return;
     }
+    
+    // Eğer success parametresi yoksa, POST request yap
     verifyEmail(token);
   }, [searchParams]);
 

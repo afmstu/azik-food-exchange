@@ -525,7 +525,7 @@ app.put('/api/user/address', authenticateToken, (req, res) => {
   );
 });
 
-// Email verification endpoint
+// Email verification endpoint (POST)
 app.post('/api/verify-email', async (req, res) => {
   try {
     const { token } = req.body;
@@ -593,6 +593,64 @@ app.post('/api/verify-email', async (req, res) => {
   } catch (error) {
     console.error('Email verification error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
+// Email verification endpoint (GET - for direct link access)
+app.get('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Doğrulama token\'ı gerekli' });
+    }
+
+    // Find verification record
+    db.get('SELECT * FROM email_verifications WHERE verificationToken = ?', [token], async (err, verification) => {
+      if (err) {
+        return res.status(500).json({ error: 'Sunucu hatası' });
+      }
+
+      if (!verification) {
+        return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
+      }
+
+      // Check if token is expired
+      if (new Date() > new Date(verification.expiresAt)) {
+        return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
+      }
+
+      // Update user email verification status
+      db.run('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'E-posta doğrulanamadı' });
+        }
+
+        // Delete the verification record
+        db.run('DELETE FROM email_verifications WHERE id = ?', [verification.id], function(err) {
+          if (err) {
+            console.error('Error deleting verification record:', err);
+          }
+
+          // Get user info for token
+          db.get('SELECT * FROM users WHERE id = ?', [verification.userId], (err, user) => {
+            if (err) {
+              return res.status(500).json({ error: 'Kullanıcı bilgileri alınamadı' });
+            }
+
+            const token = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
+            
+            // Redirect to frontend with success message
+            const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}&success=true`;
+            res.redirect(redirectUrl);
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?error=server_error`;
+    res.redirect(redirectUrl);
   }
 });
 
