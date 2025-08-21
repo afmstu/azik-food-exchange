@@ -3,12 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
 
-// Components
-import Header from './components/Header';
-import Login from './components/Login';
-import Register from './components/Register';
-import EmailVerification from './components/EmailVerification';
-
 // Lazy loaded components
 const Home = lazy(() => import('./components/Home'));
 const CreateListing = lazy(() => import('./components/CreateListing'));
@@ -17,6 +11,12 @@ const MyOffers = lazy(() => import('./components/MyOffers'));
 const ListingOffers = lazy(() => import('./components/ListingOffers'));
 const UpdateAddress = lazy(() => import('./components/UpdateAddress'));
 const Admin = lazy(() => import('./components/Admin'));
+
+// Components
+import Header from './components/Header';
+import Login from './components/Login';
+import Register from './components/Register';
+import EmailVerification from './components/EmailVerification';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
