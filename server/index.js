@@ -424,7 +424,14 @@ app.post('/api/register', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     
+    console.log('=== REGISTRATION DEBUG ===');
+    console.log('Saving verification data:', verificationData);
+    console.log('Verification token being saved:', verificationToken);
+    console.log('Token type:', typeof verificationToken);
+    console.log('Token length:', verificationToken.length);
+    
     await dbRun('email_verifications', verificationData);
+    console.log('✅ Verification data saved to database');
 
     // Send verification email
     const emailSent = await sendVerificationEmail(email, verificationToken);
@@ -614,15 +621,24 @@ app.post('/api/verify-email', async (req, res) => {
 app.get('/api/verify-email', async (req, res) => {
   try {
     const { token } = req.query;
+    
+    console.log('=== EMAIL VERIFICATION DEBUG ===');
+    console.log('Received token:', token);
+    console.log('Token type:', typeof token);
+    console.log('Token length:', token ? token.length : 0);
 
     if (!token) {
+      console.log('❌ No token provided');
       return res.status(400).json({ error: 'Doğrulama token\'ı gerekli' });
     }
 
     // Find verification record
+    console.log('🔍 Searching for verification record with token:', token);
     const verification = await dbGet('email_verifications', null, { verificationToken: token });
+    console.log('🔍 Verification record found:', verification);
 
     if (!verification) {
+      console.log('❌ No verification record found for token:', token);
       return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
     }
 
