@@ -93,15 +93,26 @@ const dbGet = async (collection, id = null, query = null) => {
       const doc = await db.collection(collection).doc(id).get();
       return doc.exists ? { id: doc.id, ...doc.data() } : null;
     } else if (query) {
+      console.log(`🔍 dbGet query for ${collection}:`, query);
       let ref = db.collection(collection);
       Object.keys(query).forEach(key => {
+        console.log(`🔍 Adding where clause: ${key} == ${query[key]}`);
         ref = ref.where(key, '==', query[key]);
       });
       const snapshot = await ref.limit(1).get();
-      return snapshot.empty ? null : { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+      console.log(`🔍 Query result: ${snapshot.size} documents found`);
+      if (!snapshot.empty) {
+        const result = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+        console.log(`🔍 Found document:`, { id: result.id, email: result.email });
+        return result;
+      } else {
+        console.log(`🔍 No documents found for query:`, query);
+        return null;
+      }
     }
     return null;
   } catch (error) {
+    console.error('🔍 dbGet error:', error);
     throw error;
   }
 };
@@ -477,6 +488,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     console.log('Email format is valid, checking database...');
+    console.log('🔍 Searching for user with email:', email);
 
     const user = await dbGet('users', null, { email: email });
 
