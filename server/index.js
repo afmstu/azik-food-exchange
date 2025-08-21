@@ -21,273 +21,46 @@ app.use(express.json());
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-// Database setup - PostgreSQL for production, SQLite for development
-let db = null;
-let isPostgreSQL = false;
+// Firebase Admin SDK initialization
+let serviceAccount = null;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    console.log('Firebase service account loaded successfully');
+  } catch (error) {
+    console.error('Error parsing Firebase service account:', error);
+  }
+}
 
-// Temporarily disable PostgreSQL to fix 500 errors
-// if (process.env.DATABASE_URL) {
-//   // PostgreSQL for production
-//   console.log('=== PostgreSQL Database Initialization ===');
-//   console.log('Using PostgreSQL database');
-//   console.log('DATABASE_URL length:', process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0);
-//   isPostgreSQL = true;
-//   
-//   try {
-//     db = new Pool({
-//       connectionString: process.env.DATABASE_URL,
-//       ssl: {
-//         rejectUnauthorized: false
-//       }
-//     });
-//     
-//     // Test connection
-//     db.query('SELECT NOW()', (err, result) => {
-//       if (err) {
-//         console.error('PostgreSQL connection error:', err);
-//         console.error('Error details:', err.message);
-//         console.error('Error code:', err.code);
-//       } else {
-//         console.log('PostgreSQL connected successfully');
-//         console.log('Current time from DB:', result.rows[0].now);
-//       }
-//     });
-//   } catch (error) {
-//     console.error('Error creating PostgreSQL pool:', error);
-//   }
-// } else {
-  // SQLite for development
-  console.log('=== SQLite Database Initialization ===');
-  console.log('Database file path:', './azik.db');
-  isPostgreSQL = false;
-  
-  db = new sqlite3.Database('./azik.db');
-// }
+if (!admin.apps.length) {
+  if (serviceAccount) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('Firebase Admin SDK initialized with service account');
+  } else {
+    console.log('Firebase service account not found - using default credentials');
+    admin.initializeApp();
+  }
+}
 
-// Database initialization function
+// Firestore database
+const db = admin.firestore();
+console.log('Firestore database initialized');
+
+// Firestore initialization
 const initializeDatabase = async () => {
   try {
-    if (isPostgreSQL) {
-      // PostgreSQL table creation
-      console.log('Creating PostgreSQL tables...');
-      
-      // Users table
-      await db.query(`
-        CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
-          role TEXT NOT NULL,
-          firstName TEXT NOT NULL,
-          lastName TEXT NOT NULL,
-          email TEXT NOT NULL UNIQUE,
-          phone TEXT NOT NULL UNIQUE,
-          province TEXT NOT NULL,
-          district TEXT NOT NULL,
-          neighborhood TEXT NOT NULL,
-          fullAddress TEXT NOT NULL,
-          password TEXT NOT NULL,
-          fcmToken TEXT,
-          isEmailVerified BOOLEAN DEFAULT FALSE,
-          isLocked BOOLEAN DEFAULT FALSE,
-          failedLoginAttempts INTEGER DEFAULT 0,
-          lastFailedLogin TIMESTAMP,
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      console.log('Users table ready');
-
-      // Email verifications table
-      await db.query(`
-        CREATE TABLE IF NOT EXISTS email_verifications (
-          id TEXT PRIMARY KEY,
-          userId TEXT NOT NULL,
-          email TEXT NOT NULL,
-          verificationToken TEXT NOT NULL UNIQUE,
-          expiresAt TIMESTAMP NOT NULL,
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
-        )
-      `);
-      console.log('Email verifications table ready');
-
-      // Food listings table
-      await db.query(`
-        CREATE TABLE IF NOT EXISTS food_listings (
-          id TEXT PRIMARY KEY,
-          userId TEXT NOT NULL,
-          foodName TEXT NOT NULL,
-          quantity INTEGER NOT NULL,
-          details TEXT,
-          startTime TEXT NOT NULL,
-          endTime TEXT NOT NULL,
-          status TEXT DEFAULT 'active',
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users (id)
-        )
-      `);
-      console.log('Food listings table ready');
-
-      // Exchange offers table
-      await db.query(`
-        CREATE TABLE IF NOT EXISTS exchange_offers (
-          id TEXT PRIMARY KEY,
-          listingId TEXT NOT NULL,
-          offererId TEXT NOT NULL,
-          status TEXT DEFAULT 'pending',
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (listingId) REFERENCES food_listings (id),
-          FOREIGN KEY (offererId) REFERENCES users (id)
-        )
-      `);
-      console.log('Exchange offers table ready');
-
-      // Notifications table
-      await db.query(`
-        CREATE TABLE IF NOT EXISTS notifications (
-          id TEXT PRIMARY KEY,
-          userId TEXT NOT NULL,
-          type TEXT NOT NULL,
-          title TEXT NOT NULL,
-          message TEXT NOT NULL,
-          isRead BOOLEAN DEFAULT FALSE,
-          relatedId TEXT,
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users (id)
-        )
-      `);
-      console.log('Notifications table ready');
-
-      // Check user count
-      const result = await db.query('SELECT COUNT(*) as count FROM users');
-      console.log(`Database initialized with ${result.rows[0].count} existing users`);
-      
-    } else {
-      // SQLite table creation
-      console.log('Creating SQLite tables...');
-      
-      return new Promise((resolve, reject) => {
-        db.serialize(() => {
-          // Users table
-          db.run(`CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            role TEXT NOT NULL,
-            firstName TEXT NOT NULL,
-            lastName TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            phone TEXT NOT NULL UNIQUE,
-            province TEXT NOT NULL,
-            district TEXT NOT NULL,
-            neighborhood TEXT NOT NULL,
-            fullAddress TEXT NOT NULL,
-            password TEXT NOT NULL,
-            fcmToken TEXT,
-            isEmailVerified BOOLEAN DEFAULT 0,
-            isLocked BOOLEAN DEFAULT 0,
-            failedLoginAttempts INTEGER DEFAULT 0,
-            lastFailedLogin DATETIME,
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-          )`, function(err) {
-            if (err) {
-              console.error('Error creating users table:', err);
-              reject(err);
-            } else {
-              console.log('Users table ready');
-            }
-          });
-
-          // Email verifications table
-          db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
-            id TEXT PRIMARY KEY,
-            userId TEXT NOT NULL,
-            email TEXT NOT NULL,
-            verificationToken TEXT NOT NULL UNIQUE,
-            expiresAt DATETIME NOT NULL,
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
-          )`, function(err) {
-            if (err) {
-              console.error('Error creating email_verifications table:', err);
-              reject(err);
-            } else {
-              console.log('Email verifications table ready');
-            }
-          });
-
-          // Food listings table
-          db.run(`CREATE TABLE IF NOT EXISTS food_listings (
-            id TEXT PRIMARY KEY,
-            userId TEXT NOT NULL,
-            foodName TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            details TEXT,
-            startTime TEXT NOT NULL,
-            endTime TEXT NOT NULL,
-            status TEXT DEFAULT 'active',
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (userId) REFERENCES users (id)
-          )`, function(err) {
-            if (err) {
-              console.error('Error creating food_listings table:', err);
-              reject(err);
-            } else {
-              console.log('Food listings table ready');
-            }
-          });
-
-          // Exchange offers table
-          db.run(`CREATE TABLE IF NOT EXISTS exchange_offers (
-            id TEXT PRIMARY KEY,
-            listingId TEXT NOT NULL,
-            offererId TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (listingId) REFERENCES food_listings (id),
-            FOREIGN KEY (offererId) REFERENCES users (id)
-          )`, function(err) {
-            if (err) {
-              console.error('Error creating exchange_offers table:', err);
-              reject(err);
-            } else {
-              console.log('Exchange offers table ready');
-            }
-          });
-
-          // Notifications table
-          db.run(`CREATE TABLE IF NOT EXISTS notifications (
-            id TEXT PRIMARY KEY,
-            userId TEXT NOT NULL,
-            type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            message TEXT NOT NULL,
-            isRead BOOLEAN DEFAULT 0,
-            relatedId TEXT,
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (userId) REFERENCES users (id)
-          )`, function(err) {
-            if (err) {
-              console.error('Error creating notifications table:', err);
-              reject(err);
-            } else {
-              console.log('Notifications table ready');
-            }
-          });
-          
-          // Check if database is empty after table creation
-          db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
-            if (err) {
-              console.error('Error checking user count:', err);
-              reject(err);
-            } else {
-              console.log(`Database initialized with ${result.count} existing users`);
-              resolve();
-            }
-          });
-        });
-      });
-    }
+    console.log('=== Firestore Database Initialization ===');
+    console.log('Firestore collections will be created automatically');
     
-    console.log('Database tables ready!');
+    // Test connection by getting user count
+    const usersSnapshot = await db.collection('users').get();
+    console.log(`Database initialized with ${usersSnapshot.size} existing users`);
+    
+    console.log('Firestore database ready!');
   } catch (error) {
-    console.error('Database initialization error:', error);
+    console.error('Firestore initialization error:', error);
     throw error;
   }
 };
@@ -298,71 +71,53 @@ initializeDatabase().catch((error) => {
   console.error('Error stack:', error.stack);
 });
 
-// Helper function for database queries
-const dbQuery = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    if (isPostgreSQL) {
-      db.query(query, params, (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      });
-    } else {
-      db.all(query, params, (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ rows });
-        }
+// Firestore helper functions
+const dbQuery = async (collection, query = null) => {
+  try {
+    let ref = db.collection(collection);
+    if (query) {
+      Object.keys(query).forEach(key => {
+        ref = ref.where(key, '==', query[key]);
       });
     }
-  });
+    const snapshot = await ref.get();
+    return { rows: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
+  } catch (error) {
+    throw error;
+  }
 };
 
-const dbGet = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    if (isPostgreSQL) {
-      db.query(query, params, (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result.rows[0] || null);
-        }
+const dbGet = async (collection, id = null, query = null) => {
+  try {
+    if (id) {
+      const doc = await db.collection(collection).doc(id).get();
+      return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    } else if (query) {
+      let ref = db.collection(collection);
+      Object.keys(query).forEach(key => {
+        ref = ref.where(key, '==', query[key]);
       });
-    } else {
-      db.get(query, params, (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
+      const snapshot = await ref.limit(1).get();
+      return snapshot.empty ? null : { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
     }
-  });
+    return null;
+  } catch (error) {
+    throw error;
+  }
 };
 
-const dbRun = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    if (isPostgreSQL) {
-      db.query(query, params, (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      });
+const dbRun = async (collection, data, id = null) => {
+  try {
+    if (id) {
+      await db.collection(collection).doc(id).set(data);
+      return { lastID: id, changes: 1 };
     } else {
-      db.run(query, params, function(err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ lastID: this.lastID, changes: this.changes });
-        }
-      });
+      const docRef = await db.collection(collection).add(data);
+      return { lastID: docRef.id, changes: 1 };
     }
-  });
+  } catch (error) {
+    throw error;
+  }
 };
 
 // JWT Secret
@@ -529,24 +284,7 @@ const sendVerificationEmail = async (email, verificationToken) => {
   }
 };
 
-// Initialize Firebase Admin SDK
-let serviceAccount;
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  console.log('Firebase service account not found in environment variables');
-  // For now, skip Firebase initialization in development
-  serviceAccount = null;
-}
-
-if (serviceAccount) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log('Firebase Admin SDK initialized successfully');
-} else {
-  console.log('Firebase Admin SDK not initialized - service account not available');
-}
+// Firebase Admin SDK already initialized above
 
 // Helper function to create notifications
 const createNotification = async (userId, type, title, message, relatedId = null) => {
