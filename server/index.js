@@ -20,27 +20,8 @@ app.use(express.json());
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-// Database setup - Use PostgreSQL if DATABASE_URL is available, otherwise SQLite
-let db;
-
-if (process.env.DATABASE_URL) {
-  // PostgreSQL setup (for production)
-  const { Pool } = require('pg');
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
-  
-  console.log('Using PostgreSQL database');
-  db = pool;
-} else {
-  // SQLite setup (for development)
-  const sqlite3 = require('sqlite3').verbose();
-  db = new sqlite3.Database('./azik.db');
-  console.log('Using SQLite database');
-}
+// Database setup
+const db = new sqlite3.Database('./azik.db');
 
 // Create tables
 db.serialize(() => {
@@ -1481,15 +1462,6 @@ app.delete('/api/admin/users/:userId', (req, res) => {
   });
 });
 
-// Catch all handler: send back React's index.html file for any non-API routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/build/index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
 // Debug token endpoint (for troubleshooting)
 app.get('/api/debug-token/:token', (req, res) => {
   const { token } = req.params;
@@ -1525,4 +1497,13 @@ app.get('/api/debug-token/:token', (req, res) => {
       timeLeft: isExpired ? 'Süresi dolmuş' : `${Math.floor((expiresAt - now) / (1000 * 60 * 60))} saat kaldı`
     });
   });
+});
+
+// Catch all handler: send back React's index.html file for any non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build/index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
