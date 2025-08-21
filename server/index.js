@@ -20,8 +20,27 @@ app.use(express.json());
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-// Database setup
-const db = new sqlite3.Database('./azik.db');
+// Database setup - Use PostgreSQL if DATABASE_URL is available, otherwise SQLite
+let db;
+
+if (process.env.DATABASE_URL) {
+  // PostgreSQL setup (for production)
+  const { Pool } = require('pg');
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+  
+  console.log('Using PostgreSQL database');
+  db = pool;
+} else {
+  // SQLite setup (for development)
+  const sqlite3 = require('sqlite3').verbose();
+  db = new sqlite3.Database('./azik.db');
+  console.log('Using SQLite database');
+}
 
 // Create tables
 db.serialize(() => {
