@@ -315,10 +315,7 @@ function Home() {
                       </span>
                     </div>
                     
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <User size={16} />
-                      <span>{listing.role}</span>
-                    </div>
+
                   </div>
                 </div>
 
