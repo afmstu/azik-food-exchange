@@ -210,11 +210,11 @@ const sendVerificationEmail = async (email, verificationToken) => {
     return false;
   }
 
-  const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+  const verificationUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verificationToken}`;
   console.log('Verification URL:', verificationUrl);
   
   const mailOptions = {
-    from: process.env.EMAIL_FROM || '"Azık Platformu" <noreply@azik.com>',
+    from: '"Azık Platformu" <noreply@azik.com>',
     to: email,
     subject: 'Azık - E-posta Doğrulama',
     html: `
@@ -641,7 +641,7 @@ app.get('/verify-email', async (req, res) => {
             const token = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
             
             // Redirect to frontend with success message
-            const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}&success=true`;
+            const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${token}&success=true`;
             res.redirect(redirectUrl);
           });
         });
@@ -649,7 +649,7 @@ app.get('/verify-email', async (req, res) => {
     });
   } catch (error) {
     console.error('Email verification error:', error);
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?error=server_error`;
+    const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?error=server_error`;
     res.redirect(redirectUrl);
   }
 });
@@ -668,7 +668,7 @@ app.post('/api/test-email', async (req, res) => {
     }
 
     const testMailOptions = {
-      from: process.env.EMAIL_FROM || '"Azık Platformu" <noreply@azik.com>',
+      from: '"Azık Platformu" <noreply@azik.com>',
       to: email,
       subject: 'Azık - Test E-postası',
       html: `
