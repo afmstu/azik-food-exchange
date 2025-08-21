@@ -2,6 +2,11 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
+import Header from './components/Header';
+import Login from './components/Login';
+import Register from './components/Register';
+import EmailVerification from './components/EmailVerification';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Lazy loaded components
 const Home = lazy(() => import('./components/Home'));
@@ -11,15 +16,6 @@ const MyOffers = lazy(() => import('./components/MyOffers'));
 const ListingOffers = lazy(() => import('./components/ListingOffers'));
 const UpdateAddress = lazy(() => import('./components/UpdateAddress'));
 const Admin = lazy(() => import('./components/Admin'));
-
-// Components
-import Header from './components/Header';
-import Login from './components/Login';
-import Register from './components/Register';
-import EmailVerification from './components/EmailVerification';
-
-// Context
-import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Configure axios
 axios.defaults.baseURL = 'http://localhost:5000';
