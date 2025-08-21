@@ -913,29 +913,41 @@ app.post('/api/offers', authenticateToken, (req, res) => {
             return res.status(500).json({ error: 'Teklif oluşturulamadı' });
           }
           
-          // Get offerer details for notification
-          db.get('SELECT firstName, lastName FROM users WHERE id = ?', [offererId], (err, offerer) => {
-            if (!err && offerer) {
-              const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
-              
-              // Create notification for listing owner
-              createNotification(
-                listing.userId,
-                'new_offer',
-                'Yeni Teklif',
-                notificationMessage,
-                offerId
-              );
-              
-              // Send FCM notification
-              sendFCMNotification(
-                listing.userId,
-                'Yeni Teklif',
-                notificationMessage,
-                { type: 'new_offer', offerId: offerId }
-              );
-            }
-          });
+                     // Get offerer details for notification
+           db.get('SELECT firstName, lastName FROM users WHERE id = ?', [offererId], (err, offerer) => {
+             if (!err && offerer) {
+               const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
+               
+               // Create notification for listing owner
+               createNotification(
+                 listing.userId,
+                 'new_offer',
+                 'Yeni Teklif',
+                 notificationMessage,
+                 offerId
+               );
+               
+               // Send FCM notification
+               sendFCMNotification(
+                 listing.userId,
+                 'Yeni Teklif',
+                 notificationMessage,
+                 { type: 'new_offer', offerId: offerId }
+               );
+               
+               // Get listing owner's email for email notification
+               db.get('SELECT email FROM users WHERE id = ?', [listing.userId], async (err, owner) => {
+                 if (!err && owner && owner.email) {
+                   // Send email notification
+                   await sendOfferNotificationEmail(
+                     owner.email,
+                     `${offerer.firstName} ${offerer.lastName}`,
+                     listing.foodName
+                   );
+                 }
+               });
+             }
+           });
           
           res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
         }
@@ -978,57 +990,79 @@ app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
           // Mark listing as completed
           db.run('UPDATE food_listings SET status = "completed" WHERE id = ?', [offer.listingId]);
           
-          // Get user details for notification
-          db.get('SELECT phone, firstName, lastName FROM users WHERE id = ?', [offer.offererId], (err, offerer) => {
-            if (!err && offerer) {
-              // Get listing owner's phone number
-              db.get('SELECT phone FROM users WHERE id = ?', [req.user.id], (err, listingOwner) => {
-                if (!err && listingOwner) {
-                  // In a real app, you'd send SMS here
-                  console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
-                  
-                  const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
-                  
-                  // Create notification for offerer
-                  createNotification(
-                    offer.offererId,
-                    'offer_accepted',
-                    'Teklif Kabul Edildi',
-                    notificationMessage,
-                    offerId
-                  );
-                  
-                  // Send FCM notification
-                  sendFCMNotification(
-                    offer.offererId,
-                    'Teklif Kabul Edildi',
-                    notificationMessage,
-                    { type: 'offer_accepted', offerId: offerId }
-                  );
-                }
-              });
-            }
-          });
-        } else {
-          const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
-          
-          // Create notification for rejected offer
-          createNotification(
-            offer.offererId,
-            'offer_rejected',
-            'Teklif Reddedildi',
-            notificationMessage,
-            offerId
-          );
-          
-          // Send FCM notification
-          sendFCMNotification(
-            offer.offererId,
-            'Teklif Reddedildi',
-            notificationMessage,
-            { type: 'offer_rejected', offerId: offerId }
-          );
-        }
+                     // Get user details for notification
+           db.get('SELECT phone, firstName, lastName, email FROM users WHERE id = ?', [offer.offererId], (err, offerer) => {
+             if (!err && offerer) {
+               // Get listing owner's phone number
+               db.get('SELECT phone FROM users WHERE id = ?', [req.user.id], (err, listingOwner) => {
+                 if (!err && listingOwner) {
+                   // In a real app, you'd send SMS here
+                   console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
+                   
+                   const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
+                   
+                   // Create notification for offerer
+                   createNotification(
+                     offer.offererId,
+                     'offer_accepted',
+                     'Teklif Kabul Edildi',
+                     notificationMessage,
+                     offerId
+                   );
+                   
+                   // Send FCM notification
+                   sendFCMNotification(
+                     offer.offererId,
+                     'Teklif Kabul Edildi',
+                     notificationMessage,
+                     { type: 'offer_accepted', offerId: offerId }
+                   );
+                   
+                   // Send email notification
+                   if (offerer.email) {
+                     sendOfferAcceptedEmail(
+                       offerer.email,
+                       `${offerer.firstName} ${offerer.lastName}`,
+                       listing.foodName,
+                       listingOwner.phone
+                     );
+                   }
+                 }
+               });
+             }
+           });
+                 } else {
+           const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
+           
+           // Create notification for rejected offer
+           createNotification(
+             offer.offererId,
+             'offer_rejected',
+             'Teklif Reddedildi',
+             notificationMessage,
+             offerId
+           );
+           
+           // Send FCM notification
+           sendFCMNotification(
+             offer.offererId,
+             'Teklif Reddedildi',
+             notificationMessage,
+             { type: 'offer_rejected', offerId: offerId }
+           );
+           
+           // Get offerer details for email notification
+           db.get('SELECT firstName, lastName, email FROM users WHERE id = ?', [offer.offererId], async (err, offerer) => {
+             if (!err && offerer && offerer.email) {
+               // Send email notification
+               await sendOfferRejectedEmail(
+                 offerer.email,
+                 `${offerer.firstName} ${offerer.lastName}`,
+                 listing.foodName
+               );
+             }
+           });
+         }
 
         res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
       });
@@ -1505,3 +1539,196 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Send offer notification email
+const sendOfferNotificationEmail = async (recipientEmail, offererName, foodName) => {
+  console.log('=== OFFER NOTIFICATION EMAIL ===');
+  console.log('Recipient:', recipientEmail);
+  console.log('Offerer:', offererName);
+  console.log('Food:', foodName);
+  
+  if (!transporter) {
+    console.log('❌ Email transporter not available');
+    return false;
+  }
+
+  const mailOptions = {
+    from: '"Azık Platformu" <noreply@azik.com>',
+    to: recipientEmail,
+    subject: 'Azık - Yeni Teklif Geldi!',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #ff9a56 0%, #ffd93d 50%, #ff6b35 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">Azık</h1>
+          <p style="color: white; margin: 10px 0 0 0;">Yemek Takası Platformu</p>
+        </div>
+        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <h2 style="color: #333; margin-bottom: 20px;">🎉 Yeni Teklif Geldi!</h2>
+          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+            <strong>${offererName}</strong> ilanınıza teklif verdi!
+          </p>
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #333; margin: 0 0 10px 0;">İlan Detayları:</h3>
+            <p style="color: #666; margin: 0;"><strong>Yemek:</strong> ${foodName}</p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/my-listings" style="background: linear-gradient(135deg, #ff6b35, #ff9a56); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">
+              Teklifi Görüntüle
+            </a>
+          </div>
+          <p style="color: #999; font-size: 14px; margin-top: 25px;">
+            Bu e-posta, ilanınıza teklif geldiğinde otomatik olarak gönderilmiştir.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
+          </p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    console.log('📧 Sending offer notification email...');
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Offer notification email sent successfully');
+    console.log('Message ID:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending offer notification email:', error);
+    return false;
+  }
+};
+
+// Send offer accepted notification email
+const sendOfferAcceptedEmail = async (recipientEmail, offererName, foodName, ownerPhone) => {
+  console.log('=== OFFER ACCEPTED EMAIL ===');
+  console.log('Recipient:', recipientEmail);
+  console.log('Offerer:', offererName);
+  console.log('Food:', foodName);
+  console.log('Owner Phone:', ownerPhone);
+  
+  if (!transporter) {
+    console.log('❌ Email transporter not available');
+    return false;
+  }
+
+  const mailOptions = {
+    from: '"Azık Platformu" <noreply@azik.com>',
+    to: recipientEmail,
+    subject: 'Azık - Teklifiniz Kabul Edildi! 🎉',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 50%, #17a2b8 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">Azık</h1>
+          <p style="color: white; margin: 10px 0 0 0;">Yemek Takası Platformu</p>
+        </div>
+        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <h2 style="color: #333; margin-bottom: 20px;">🎉 Teklifiniz Kabul Edildi!</h2>
+          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+            Tebrikler! <strong>${foodName}</strong> ilanına verdiğiniz teklif kabul edildi!
+          </p>
+          <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #155724; margin: 0 0 10px 0;">📞 İletişim Bilgileri:</h3>
+            <p style="color: #155724; margin: 0;"><strong>Telefon:</strong> ${ownerPhone}</p>
+            <p style="color: #155724; margin: 5px 0 0 0;"><strong>İlan:</strong> ${foodName}</p>
+          </div>
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="color: #856404; margin: 0; font-size: 14px;">
+              <strong>💡 Öneri:</strong> Yukarıdaki telefon numarasını arayarak detayları konuşabilir ve buluşma yerini belirleyebilirsiniz.
+            </p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/my-offers" style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">
+              Tekliflerimi Görüntüle
+            </a>
+          </div>
+          <p style="color: #999; font-size: 14px; margin-top: 25px;">
+            Bu e-posta, teklifiniz kabul edildiğinde otomatik olarak gönderilmiştir.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
+          </p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    console.log('📧 Sending offer accepted email...');
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Offer accepted email sent successfully');
+    console.log('Message ID:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending offer accepted email:', error);
+    return false;
+  }
+};
+
+// Send offer rejected notification email
+const sendOfferRejectedEmail = async (recipientEmail, offererName, foodName) => {
+  console.log('=== OFFER REJECTED EMAIL ===');
+  console.log('Recipient:', recipientEmail);
+  console.log('Offerer:', offererName);
+  console.log('Food:', foodName);
+  
+  if (!transporter) {
+    console.log('❌ Email transporter not available');
+    return false;
+  }
+
+  const mailOptions = {
+    from: '"Azık Platformu" <noreply@azik.com>',
+    to: recipientEmail,
+    subject: 'Azık - Teklif Durumu',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #6c757d 0%, #495057 50%, #343a40 100%); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">Azık</h1>
+          <p style="color: white; margin: 10px 0 0 0;">Yemek Takası Platformu</p>
+        </div>
+        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <h2 style="color: #333; margin-bottom: 20px;">Teklif Durumu</h2>
+          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+            <strong>${foodName}</strong> ilanına verdiğiniz teklif reddedildi.
+          </p>
+          <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #495057; margin: 0 0 10px 0;">📋 İlan Bilgileri:</h3>
+            <p style="color: #6c757d; margin: 0;"><strong>Yemek:</strong> ${foodName}</p>
+            <p style="color: #6c757d; margin: 5px 0 0 0;"><strong>Durum:</strong> Teklif Reddedildi</p>
+          </div>
+          <div style="background: #e2e3e5; border: 1px solid #d6d8db; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="color: #495057; margin: 0; font-size: 14px;">
+              <strong>💡 Öneri:</strong> Başka ilanlara teklif verebilir veya kendi ilanınızı oluşturabilirsiniz.
+            </p>
+          </div>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/" style="background: linear-gradient(135deg, #6c757d, #495057); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">
+              Diğer İlanları Görüntüle
+            </a>
+          </div>
+          <p style="color: #999; font-size: 14px; margin-top: 25px;">
+            Bu e-posta, teklifiniz reddedildiğinde otomatik olarak gönderilmiştir.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            Bu girişim, Boğaziçi Üniversitesi Ekonomi öğrencisi Mustafa Özkoca tarafından gönüllü olarak geliştirilmiştir.
+          </p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    console.log('📧 Sending offer rejected email...');
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Offer rejected email sent successfully');
+    console.log('Message ID:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending offer rejected email:', error);
+    return false;
+  }
+};
