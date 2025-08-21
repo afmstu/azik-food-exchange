@@ -225,7 +225,7 @@ const sendVerificationEmail = async (email, verificationToken) => {
     return false;
   }
 
-  const verificationUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verificationToken}`;
+  const verificationUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/api/verify-email?token=${verificationToken}`;
   console.log('Verification URL:', verificationUrl);
   
   const mailOptions = {
@@ -555,7 +555,7 @@ app.put('/api/user/address', authenticateToken, async (req, res) => {
   }
 });
 
-// Email verification endpoint (POST)
+// Email verification endpoint (POST and GET)
 app.post('/api/verify-email', async (req, res) => {
   try {
     const { token } = req.body;
@@ -611,7 +611,7 @@ app.post('/api/verify-email', async (req, res) => {
 });
 
 // Email verification endpoint (GET - for direct link access)
-app.get('/verify-email', async (req, res) => {
+app.get('/api/verify-email', async (req, res) => {
   try {
     const { token } = req.query;
 
@@ -649,6 +649,8 @@ app.get('/verify-email', async (req, res) => {
     res.redirect(redirectUrl);
   }
 });
+
+
 
 // Test email endpoint (for debugging)
 app.post('/api/test-email', async (req, res) => {
