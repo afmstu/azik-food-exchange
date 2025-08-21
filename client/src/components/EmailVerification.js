@@ -18,10 +18,9 @@ function EmailVerification() {
     const success = searchParams.get('success');
     const error = searchParams.get('error');
     
-    if (success === 'true' && token) {
-      // Server'dan redirect geldi, kullanıcıyı giriş yaptır
+    if (success === 'true') {
+      // Server'dan redirect geldi, doğrulama başarılı
       setVerificationStatus('success');
-      login(token);
       toast.success('E-posta doğrulandı! Giriş yapıldı.');
       
       // Countdown başlat
