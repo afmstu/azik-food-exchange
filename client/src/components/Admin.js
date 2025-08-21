@@ -9,15 +9,27 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user?.role === 'admin') {
-      fetchUsers();
-    }
-  }, [user]);
+  // Geliştirici kimlik bilgileri kontrolü
+  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+  const ADMIN_PASSWORD = 'mF3z4Vsf.';
 
-  const fetchUsers = async () => {
+  useEffect(() => {
+    // URL'den parametreleri al
+    const urlParams = new URLSearchParams(window.location.search);
+    const email = urlParams.get('email');
+    const password = urlParams.get('password');
+    
+    // Eğer doğru kimlik bilgileri varsa kullanıcıları yükle
+    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      fetchUsers(email, password);
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchUsers = async (email, password) => {
     try {
-      const response = await axios.get(`/api/admin/users?email=${ADMIN_EMAIL}&password=${ADMIN_PASSWORD}`);
+      const response = await axios.get(`/api/admin/users?email=${email}&password=${password}`);
       setUsers(response.data);
     } catch (error) {
       toast.error('Kullanıcılar yüklenirken hata oluştu');
@@ -31,18 +43,19 @@ function Admin() {
       return;
     }
 
+    // URL'den parametreleri al
+    const urlParams = new URLSearchParams(window.location.search);
+    const email = urlParams.get('email');
+    const password = urlParams.get('password');
+
     try {
-      await axios.delete(`/api/admin/users/${userId}?email=${ADMIN_EMAIL}&password=${ADMIN_PASSWORD}`);
+      await axios.delete(`/api/admin/users/${userId}?email=${email}&password=${password}`);
       toast.success('Kullanıcı başarıyla silindi');
-      fetchUsers();
+      fetchUsers(email, password);
     } catch (error) {
       toast.error('Kullanıcı silinirken hata oluştu');
     }
   };
-
-  // Geliştirici kimlik bilgileri kontrolü
-  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-  const ADMIN_PASSWORD = 'mF3z4Vsf.';
   
   // URL'den parametreleri al
   const urlParams = new URLSearchParams(window.location.search);
