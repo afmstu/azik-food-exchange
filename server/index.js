@@ -661,7 +661,7 @@ app.post('/api/test-email', async (req, res) => {
     const testMailOptions = {
       from: '"Azık Platformu" <noreply@azik.com>',
       to: email,
-      subject: 'Azık - Test E-postası',
+      subject: 'Azık - Test E-postası v2',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Test E-postası</h2>
