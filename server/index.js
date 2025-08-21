@@ -1162,7 +1162,6 @@ app.get('/api/my-listings', authenticateToken, async (req, res) => {
   try {
     const listingsSnapshot = await db.collection('food_listings')
       .where('userId', '==', req.user.id)
-      .orderBy('createdAt', 'desc')
       .get();
     
     const listings = [];
@@ -1188,6 +1187,9 @@ app.get('/api/my-listings', authenticateToken, async (req, res) => {
       }
     }
     
+    // Sort by createdAt descending in memory
+    listings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
     res.json(listings);
   } catch (error) {
     console.error('Get my listings error:', error);
@@ -1200,7 +1202,6 @@ app.get('/api/my-offers', authenticateToken, async (req, res) => {
   try {
     const offersSnapshot = await db.collection('exchange_offers')
       .where('offererId', '==', req.user.id)
-      .orderBy('createdAt', 'desc')
       .get();
     
     const offers = [];
@@ -1236,6 +1237,9 @@ app.get('/api/my-offers', authenticateToken, async (req, res) => {
       }
     }
     
+    // Sort by createdAt descending in memory
+    offers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
     res.json(offers);
   } catch (error) {
     console.error('Get my offers error:', error);
@@ -1259,7 +1263,6 @@ app.get('/api/listing-offers', authenticateToken, async (req, res) => {
       // Get offers for this listing
       const listingOffersSnapshot = await db.collection('exchange_offers')
         .where('listingId', '==', listingDoc.id)
-        .orderBy('createdAt', 'desc')
         .get();
       
       for (const offerDoc of listingOffersSnapshot.docs) {
@@ -1548,7 +1551,6 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
     const notificationsSnapshot = await db.collection('notifications')
       .where('userId', '==', req.user.id)
-      .orderBy('createdAt', 'desc')
       .limit(50)
       .get();
     
@@ -1556,6 +1558,9 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort by createdAt descending in memory
+    notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
     res.json(notifications);
   } catch (error) {
@@ -1611,13 +1616,15 @@ app.get('/api/admin/users', async (req, res) => {
   }
 
     const usersSnapshot = await db.collection('users')
-      .orderBy('createdAt', 'desc')
       .get();
     
     const users = usersSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort by createdAt descending in memory
+    users.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
     res.json(users);
   } catch (error) {
