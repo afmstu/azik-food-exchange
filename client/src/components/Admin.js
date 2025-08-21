@@ -107,108 +107,100 @@ function Admin() {
           <h2 className="text-lg font-semibold mb-2">Kayıtlı Kullanıcılar ({users.length})</h2>
         </div>
 
-        {/* Tablo Başlığı */}
-        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          <div className="grid grid-cols-12 gap-4 text-sm font-semibold text-gray-700">
-            <div className="col-span-1">#</div>
-            <div className="col-span-2">Ad Soyad</div>
-            <div className="col-span-3">E-posta</div>
-            <div className="col-span-2">Telefon</div>
-            <div className="col-span-2">Konum</div>
-            <div className="col-span-1">Rol</div>
-            <div className="col-span-1">İşlem</div>
-          </div>
-        </div>
-
-        {/* Tablo İçeriği */}
-        <div className="space-y-2">
-          {users.map((user, index) => (
-            <div key={user.id} className="bg-white p-4 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
-              <div className="grid grid-cols-12 gap-4 items-center text-sm">
-                {/* Sıra No */}
-                <div className="col-span-1">
-                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                    {index + 1}
-                  </span>
-                </div>
-
-                {/* Ad Soyad */}
-                <div className="col-span-2">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                      <span className="text-orange-600 font-semibold text-xs">
-                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                      </span>
+        {/* Gerçek Tablo */}
+        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">#</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ad Soyad</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">E-posta</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Telefon</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Konum</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Rol</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Kayıt Tarihi</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">İşlem</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {users.map((user, index) => (
+                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3">
+                    <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                      {index + 1}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                        <span className="text-orange-600 font-semibold text-xs">
+                          {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-800">
+                          {user.firstName} {user.lastName}
+                        </div>
+                      </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-3">
                     <div>
-                      <div className="font-medium text-gray-800">
-                        {user.firstName} {user.lastName}
-                      </div>
+                      <div className="text-gray-800 font-medium">{user.email}</div>
                       <div className="text-xs text-gray-500">
-                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString('tr-TR') : 'Tarih yok'}
+                        {user.emailVerified ? '✅ Doğrulanmış' : '❌ Doğrulanmamış'}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* E-posta */}
-                <div className="col-span-3">
-                  <div className="text-gray-800 font-medium">{user.email}</div>
-                  <div className="text-xs text-gray-500">
-                    {user.emailVerified ? '✅ Doğrulanmış' : '❌ Doğrulanmamış'}
-                  </div>
-                </div>
-
-                {/* Telefon */}
-                <div className="col-span-2">
-                  <div className="text-gray-800">{user.phone || 'Belirtilmemiş'}</div>
-                </div>
-
-                {/* Konum */}
-                <div className="col-span-2">
-                  <div className="text-gray-800">
-                    {user.province && user.district ? 
-                      `${user.province} / ${user.district}` : 
-                      'Belirtilmemiş'
-                    }
-                  </div>
-                  {user.neighborhood && (
-                    <div className="text-xs text-gray-500">{user.neighborhood}</div>
-                  )}
-                </div>
-
-                {/* Rol */}
-                <div className="col-span-1">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    user.role === 'admin' 
-                      ? 'bg-purple-100 text-purple-800' 
-                      : user.role === 'Aşçı'
-                      ? 'bg-red-100 text-red-800'
-                      : user.role === 'Garson'
-                      ? 'bg-blue-100 text-blue-800'
-                      : user.role === 'Mutfak Görevlisi'
-                      ? 'bg-green-100 text-green-800'
-                      : user.role === 'Restoran Müdürü'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {user.role || 'Belirtilmemiş'}
-                  </span>
-                </div>
-
-                {/* İşlem */}
-                <div className="col-span-1">
-                  <button
-                    onClick={() => deleteUser(user.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Kullanıcıyı Sil"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+                  </td>
+                  <td className="px-4 py-3 text-gray-800">
+                    {user.phone || 'Belirtilmemiş'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div>
+                      <div className="text-gray-800">
+                        {user.province && user.district ? 
+                          `${user.province} / ${user.district}` : 
+                          'Belirtilmemiş'
+                        }
+                      </div>
+                      {user.neighborhood && (
+                        <div className="text-xs text-gray-500">{user.neighborhood}</div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      user.role === 'admin' 
+                        ? 'bg-purple-100 text-purple-800' 
+                        : user.role === 'Aşçı'
+                        ? 'bg-red-100 text-red-800'
+                        : user.role === 'Garson'
+                        ? 'bg-blue-100 text-blue-800'
+                        : user.role === 'Mutfak Görevlisi'
+                        ? 'bg-green-100 text-green-800'
+                        : user.role === 'Restoran Müdürü'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {user.role || 'Belirtilmemiş'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString('tr-TR') : 'Tarih yok'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => deleteUser(user.id)}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Kullanıcıyı Sil"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {users.length === 0 && (
