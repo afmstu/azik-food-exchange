@@ -101,13 +101,26 @@ const dbGet = async (collection, id = null, query = null) => {
       });
       const snapshot = await ref.limit(1).get();
       console.log(`🔍 Query result: ${snapshot.size} documents found`);
-      if (!snapshot.empty) {
+      
+      // Debug: Let's see all documents in the collection to understand the data
+      if (snapshot.empty) {
+        console.log(`🔍 No documents found for query:`, query);
+        const allDocs = await db.collection(collection).get();
+        console.log(`🔍 Total documents in ${collection}: ${allDocs.size}`);
+        allDocs.forEach(doc => {
+          const data = doc.data();
+          console.log(`🔍 Document ${doc.id}:`, { 
+            id: doc.id, 
+            email: data.email,
+            emailType: typeof data.email,
+            emailLength: data.email ? data.email.length : 'null'
+          });
+        });
+        return null;
+      } else {
         const result = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
         console.log(`🔍 Found document:`, { id: result.id, email: result.email });
         return result;
-      } else {
-        console.log(`🔍 No documents found for query:`, query);
-        return null;
       }
     }
     return null;
@@ -159,25 +172,25 @@ if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
     },
     {
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
     },
     {
       service: 'gmail',
@@ -210,10 +223,10 @@ if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
         console.log(`Config ${configIndex + 1} failed:`, error.message);
         configIndex++;
         tryConfig();
-      } else {
+    } else {
         console.log(`Email config ${configIndex + 1} successful!`);
-      }
-    });
+    }
+  });
   };
   
   tryConfig();
@@ -329,25 +342,25 @@ const sendFCMNotification = async (userId, title, body, data = {}) => {
     // Get user's FCM token
     const user = await dbGet('SELECT fcmToken FROM users WHERE id = ?', [userId]);
     if (!user || !user.fcmToken) {
-      console.log('FCM token not found for user:', userId);
-      return;
-    }
+        console.log('FCM token not found for user:', userId);
+        return;
+      }
 
-    const message = {
-      notification: {
-        title: title,
-        body: body
-      },
-      data: data,
-      token: user.fcmToken
-    };
+      const message = {
+        notification: {
+          title: title,
+          body: body
+        },
+        data: data,
+        token: user.fcmToken
+      };
 
-    try {
-      const response = await admin.messaging().send(message);
-      console.log('FCM notification sent successfully:', response);
-    } catch (error) {
-      console.error('Error sending FCM notification:', error);
-    }
+      try {
+        const response = await admin.messaging().send(message);
+        console.log('FCM notification sent successfully:', response);
+      } catch (error) {
+        console.error('Error sending FCM notification:', error);
+      }
   } catch (error) {
     console.error('Error in sendFCMNotification:', error);
   }
@@ -397,12 +410,12 @@ app.post('/api/register', async (req, res) => {
 
     // Check if email or phone already exists
     const existingUser = await dbGet('users', null, { email: email }) || await dbGet('users', null, { phone: phone });
-    
-    if (existingUser) {
-      return res.status(400).json({ error: 'Bu e-posta adresi veya telefon numarası zaten kullanılıyor' });
-    }
 
-    // Insert user with email verification status
+      if (existingUser) {
+        return res.status(400).json({ error: 'Bu e-posta adresi veya telefon numarası zaten kullanılıyor' });
+      }
+
+      // Insert user with email verification status
     const userData = {
       id: userId,
       role,
@@ -421,11 +434,11 @@ app.post('/api/register', async (req, res) => {
     
     await dbRun('users', userData, userId);
 
-    // Create verification token
-    const verificationToken = uuidv4();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+          // Create verification token
+          const verificationToken = uuidv4();
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // Insert verification record
+          // Insert verification record
     const verificationData = {
       id: uuidv4(),
       userId,
@@ -444,23 +457,23 @@ app.post('/api/register', async (req, res) => {
     await dbRun('email_verifications', verificationData);
     console.log('✅ Verification data saved to database');
 
-    // Send verification email
-    const emailSent = await sendVerificationEmail(email, verificationToken);
-    
-    if (emailSent) {
-      res.status(201).json({ 
-        message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
-        requiresVerification: true,
-        user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
-      });
-    } else {
-      res.status(201).json({ 
-        message: 'Kayıt başarılı! E-posta gönderilemedi, lütfen daha sonra tekrar deneyin.',
-        requiresVerification: true,
-        emailSent: false,
-        user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
-      });
-    }
+              // Send verification email
+              const emailSent = await sendVerificationEmail(email, verificationToken);
+              
+              if (emailSent) {
+                res.status(201).json({ 
+                  message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
+                  requiresVerification: true,
+                  user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+                });
+              } else {
+                res.status(201).json({ 
+                  message: 'Kayıt başarılı! E-posta gönderilemedi, lütfen daha sonra tekrar deneyin.',
+                  requiresVerification: true,
+                  emailSent: false,
+                  user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+                });
+              }
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
@@ -470,22 +483,22 @@ app.post('/api/register', async (req, res) => {
 // Login
 app.post('/api/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
     console.log('=== Login Attempt ===');
     console.log('Email:', email);
     console.log('Password provided:', !!password);
 
-    if (!email || !password) {
+  if (!email || !password) {
       console.log('Login failed: Missing email or password');
-      return res.status(400).json({ error: 'E-posta ve şifre zorunludur' });
-    }
+    return res.status(400).json({ error: 'E-posta ve şifre zorunludur' });
+  }
 
-    // Validate email format
-    if (!validateEmail(email)) {
+  // Validate email format
+  if (!validateEmail(email)) {
       console.log('Login failed: Invalid email format');
-      return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
-    }
+    return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
+  }
 
     console.log('Email format is valid, checking database...');
     console.log('🔍 Searching for user with email:', email);
@@ -542,12 +555,12 @@ app.post('/api/login', async (req, res) => {
 // Update user address
 app.put('/api/user/address', authenticateToken, async (req, res) => {
   try {
-    const { province, district, neighborhood, fullAddress } = req.body;
-    const userId = req.user.id;
+  const { province, district, neighborhood, fullAddress } = req.body;
+  const userId = req.user.id;
 
-    if (!province || !district || !neighborhood || !fullAddress) {
-      return res.status(400).json({ error: 'Tüm adres alanları zorunludur' });
-    }
+  if (!province || !district || !neighborhood || !fullAddress) {
+    return res.status(400).json({ error: 'Tüm adres alanları zorunludur' });
+  }
 
     const userData = {
       province,
@@ -559,19 +572,19 @@ app.put('/api/user/address', authenticateToken, async (req, res) => {
     
     await dbRun('users', userData, userId);
 
-    res.json({ 
-      message: 'Adres başarıyla güncellendi',
-      user: {
-        province,
-        district,
-        neighborhood,
-        fullAddress
-      }
-    });
+      res.json({ 
+        message: 'Adres başarıyla güncellendi',
+        user: {
+          province,
+          district,
+          neighborhood,
+          fullAddress
+        }
+      });
   } catch (error) {
     console.error('Address update error:', error);
     res.status(500).json({ error: 'Adres güncellenemedi' });
-  }
+    }
 });
 
 // Email verification endpoint (POST and GET)
@@ -586,42 +599,42 @@ app.post('/api/verify-email', async (req, res) => {
     // Find verification record
     const verification = await dbGet('email_verifications', null, { verificationToken: token });
 
-    if (!verification) {
-      return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
-    }
+      if (!verification) {
+        return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
+      }
 
-    // Check if token is expired
-    if (new Date() > new Date(verification.expiresAt)) {
-      return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
-    }
+      // Check if token is expired
+      if (new Date() > new Date(verification.expiresAt)) {
+        return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
+      }
 
-    // Update user email verification status
+      // Update user email verification status
     await dbRun('users', { isEmailVerified: true, updatedAt: new Date().toISOString() }, verification.userId);
 
-    // Delete the verification record
+        // Delete the verification record
     await db.collection('email_verifications').doc(verification.id).delete();
 
-    // Get user info for token
+          // Get user info for token
     const user = await dbGet('users', verification.userId);
 
     const jwtToken = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
-    
-    res.json({ 
-      success: true,
-      message: 'E-posta başarıyla doğrulandı',
+            
+            res.json({ 
+              success: true,
+              message: 'E-posta başarıyla doğrulandı',
       token: jwtToken,
-      user: { 
-        id: user.id, 
-        role: user.role, 
-        firstName: user.firstName, 
-        lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        province: user.province,
-        district: user.district,
-        neighborhood: user.neighborhood,
-        fullAddress: user.fullAddress
-      }
+              user: { 
+                id: user.id, 
+                role: user.role, 
+                firstName: user.firstName, 
+                lastName: user.lastName,
+                email: user.email,
+                phone: user.phone,
+                province: user.province,
+                district: user.district,
+                neighborhood: user.neighborhood,
+                fullAddress: user.fullAddress
+              }
     });
   } catch (error) {
     console.error('Email verification error:', error);
@@ -749,35 +762,35 @@ app.post('/api/resend-verification', async (req, res) => {
     // Find user
     const user = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
 
-    if (!user) {
-      return res.status(404).json({ error: 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı' });
-    }
+      if (!user) {
+        return res.status(404).json({ error: 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı' });
+      }
 
-    if (user.isEmailVerified) {
-      return res.status(400).json({ error: 'Bu e-posta adresi zaten doğrulanmış' });
-    }
+      if (user.isEmailVerified) {
+        return res.status(400).json({ error: 'Bu e-posta adresi zaten doğrulanmış' });
+      }
 
-    // Delete old verification records
+      // Delete old verification records
     await dbRun('DELETE FROM email_verifications WHERE userId = ?', [user.id]);
 
-    // Create new verification token
-    const verificationToken = uuidv4();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        // Create new verification token
+        const verificationToken = uuidv4();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // Insert new verification record
+        // Insert new verification record
     await dbRun(
-      'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
       [uuidv4(), user.id, email, verificationToken, expiresAt.toISOString()]
     );
 
-    // Send verification email
-    const emailSent = await sendVerificationEmail(email, verificationToken);
-    
-    if (emailSent) {
-      res.json({ message: 'Doğrulama e-postası tekrar gönderildi' });
-    } else {
-      res.status(500).json({ error: 'E-posta gönderilemedi' });
-    }
+            // Send verification email
+            const emailSent = await sendVerificationEmail(email, verificationToken);
+            
+            if (emailSent) {
+              res.json({ message: 'Doğrulama e-postası tekrar gönderildi' });
+            } else {
+              res.status(500).json({ error: 'E-posta gönderilemedi' });
+            }
   } catch (error) {
     console.error('Resend verification error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
@@ -803,11 +816,11 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
 // Save FCM token
 app.post('/api/user/fcm-token', authenticateToken, async (req, res) => {
   try {
-    const { fcmToken } = req.body;
-    
-    if (!fcmToken) {
-      return res.status(400).json({ error: 'FCM token zorunludur' });
-    }
+  const { fcmToken } = req.body;
+  
+  if (!fcmToken) {
+    return res.status(400).json({ error: 'FCM token zorunludur' });
+  }
 
     await dbRun('UPDATE users SET fcmToken = ? WHERE id = ?', [fcmToken, req.user.id]);
     res.json({ message: 'FCM token başarıyla kaydedildi' });
@@ -820,34 +833,34 @@ app.post('/api/user/fcm-token', authenticateToken, async (req, res) => {
 // Create food listing
 app.post('/api/listings', authenticateToken, async (req, res) => {
   try {
-    const { foodName, quantity, details, startTime, endTime } = req.body;
-    const userId = req.user.id;
+  const { foodName, quantity, details, startTime, endTime } = req.body;
+  const userId = req.user.id;
 
-    if (!foodName || !quantity || !startTime || !endTime) {
-      return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
-    }
+  if (!foodName || !quantity || !startTime || !endTime) {
+    return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
+  }
 
-    const listingId = uuidv4();
+  const listingId = uuidv4();
 
     await dbRun(
-      'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [listingId, userId, foodName, quantity, details, startTime, endTime, 'active']
     );
     
-    res.status(201).json({ message: 'İlan başarıyla oluşturuldu', listingId });
+      res.status(201).json({ message: 'İlan başarıyla oluşturuldu', listingId });
   } catch (error) {
     console.error('Create listing error:', error);
     res.status(500).json({ error: 'İlan oluşturulamadı' });
-  }
+    }
 });
 
 // Delete food listing
 app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
   try {
-    const { listingId } = req.params;
-    const userId = req.user.id;
+  const { listingId } = req.params;
+  const userId = req.user.id;
 
-    // Check if listing exists and belongs to user
+  // Check if listing exists and belongs to user
     const listing = await dbGet('SELECT * FROM food_listings WHERE id = ?', [listingId]);
 
     if (!listing) {
@@ -861,10 +874,10 @@ app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
     // Delete related offers first
     await dbRun('DELETE FROM exchange_offers WHERE listingId = ?', [listingId]);
 
-    // Delete the listing
+      // Delete the listing
     await dbRun('DELETE FROM food_listings WHERE id = ?', [listingId]);
     
-    res.json({ message: 'İlan başarıyla silindi' });
+        res.json({ message: 'İlan başarıyla silindi' });
   } catch (error) {
     console.error('Delete listing error:', error);
     res.status(500).json({ error: 'İlan silinemedi' });
@@ -874,26 +887,26 @@ app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
 // Get all active listings
 app.get('/api/listings', async (req, res) => {
   try {
-    const { province, district } = req.query;
-    
-    let query = `
-      SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-      FROM food_listings fl
-      JOIN users u ON fl.userId = u.id
-      WHERE fl.status = 'active'
-    `;
-    let params = [];
+  const { province, district } = req.query;
+  
+  let query = `
+    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+    FROM food_listings fl
+    JOIN users u ON fl.userId = u.id
+    WHERE fl.status = 'active'
+  `;
+  let params = [];
 
-    if (province) {
-      query += ' AND u.province = ?';
-      params.push(province);
-    }
-    if (district) {
-      query += ' AND u.district = ?';
-      params.push(district);
-    }
+  if (province) {
+    query += ' AND u.province = ?';
+    params.push(province);
+  }
+  if (district) {
+    query += ' AND u.district = ?';
+    params.push(district);
+  }
 
-    query += ' ORDER BY fl.createdAt DESC';
+  query += ' ORDER BY fl.createdAt DESC';
 
     const result = await dbQuery(query, params);
     res.json(result.rows);
@@ -906,14 +919,14 @@ app.get('/api/listings', async (req, res) => {
 // Create exchange offer
 app.post('/api/offers', authenticateToken, async (req, res) => {
   try {
-    const { listingId } = req.body;
-    const offererId = req.user.id;
+  const { listingId } = req.body;
+  const offererId = req.user.id;
 
-    if (!listingId) {
-      return res.status(400).json({ error: 'İlan ID zorunludur' });
-    }
+  if (!listingId) {
+    return res.status(400).json({ error: 'İlan ID zorunludur' });
+  }
 
-    // Check if listing exists and is active
+  // Check if listing exists and is active
     const listing = await dbGet('SELECT * FROM food_listings WHERE id = ? AND status = "active"', [listingId]);
     
     if (!listing) {
@@ -926,39 +939,39 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
 
     // Check if user already made an offer
     const existingOffer = await dbGet('SELECT * FROM exchange_offers WHERE listingId = ? AND offererId = ?', [listingId, offererId]);
-    
-    if (existingOffer) {
-      return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
-    }
 
-    const offerId = uuidv4();
+      if (existingOffer) {
+        return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
+      }
+
+      const offerId = uuidv4();
 
     await dbRun(
-      'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
+        'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
       [offerId, listingId, offererId]
     );
-    
-    // Get offerer details for notification
+          
+          // Get offerer details for notification
     const offerer = await dbGet('SELECT firstName, lastName FROM users WHERE id = ?', [offererId]);
     
     if (offerer) {
-      const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
-      
-      // Create notification for listing owner
+              const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
+              
+              // Create notification for listing owner
       await createNotification(
-        listing.userId,
-        'new_offer',
-        'Yeni Teklif',
-        notificationMessage,
-        offerId
-      );
-      
-      // Send FCM notification
+                listing.userId,
+                'new_offer',
+                'Yeni Teklif',
+                notificationMessage,
+                offerId
+              );
+              
+              // Send FCM notification
       await sendFCMNotification(
-        listing.userId,
-        'Yeni Teklif',
-        notificationMessage,
-        { type: 'new_offer', offerId: offerId }
+                listing.userId,
+                'Yeni Teklif',
+                notificationMessage,
+                { type: 'new_offer', offerId: offerId }
       );
       
       // Get listing owner's email for email notification
@@ -973,23 +986,23 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
         );
       }
     }
-    
-    res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
+          
+          res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
   } catch (error) {
     console.error('Create offer error:', error);
     res.status(500).json({ error: 'Teklif oluşturulamadı' });
-  }
+        }
 });
 
 // Accept/Reject offer
 app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
   try {
-    const { offerId } = req.params;
-    const { status } = req.body; // 'accepted' or 'rejected'
+  const { offerId } = req.params;
+  const { status } = req.body; // 'accepted' or 'rejected'
 
-    if (!['accepted', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Geçersiz durum' });
-    }
+  if (!['accepted', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Geçersiz durum' });
+  }
 
     const offer = await dbGet('SELECT * FROM exchange_offers WHERE id = ?', [offerId]);
     
@@ -1001,48 +1014,48 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
     const listing = await dbGet('SELECT * FROM food_listings WHERE id = ?', [offer.listingId]);
     
     if (!listing) {
-      return res.status(404).json({ error: 'İlan bulunamadı' });
-    }
+        return res.status(404).json({ error: 'İlan bulunamadı' });
+      }
 
-    // Check if user owns the listing
-    if (listing.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
-    }
+      // Check if user owns the listing
+      if (listing.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+      }
 
     await dbRun('UPDATE exchange_offers SET status = ? WHERE id = ?', [status, offerId]);
 
-    if (status === 'accepted') {
-      // Mark listing as completed
+        if (status === 'accepted') {
+          // Mark listing as completed
       await dbRun('UPDATE food_listings SET status = "completed" WHERE id = ?', [offer.listingId]);
-      
-      // Get user details for notification
+          
+          // Get user details for notification
       const offerer = await dbGet('SELECT phone, firstName, lastName, email FROM users WHERE id = ?', [offer.offererId]);
       
       if (offerer) {
-        // Get listing owner's phone number
+              // Get listing owner's phone number
         const listingOwner = await dbGet('SELECT phone FROM users WHERE id = ?', [req.user.id]);
         
         if (listingOwner) {
-          // In a real app, you'd send SMS here
-          console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
-          
-          const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
-          
-          // Create notification for offerer
+                  // In a real app, you'd send SMS here
+                  console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
+                  
+                  const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
+                  
+                  // Create notification for offerer
           await createNotification(
-            offer.offererId,
-            'offer_accepted',
-            'Teklif Kabul Edildi',
-            notificationMessage,
-            offerId
-          );
-          
-          // Send FCM notification
+                    offer.offererId,
+                    'offer_accepted',
+                    'Teklif Kabul Edildi',
+                    notificationMessage,
+                    offerId
+                  );
+                  
+                  // Send FCM notification
           await sendFCMNotification(
-            offer.offererId,
-            'Teklif Kabul Edildi',
-            notificationMessage,
-            { type: 'offer_accepted', offerId: offerId }
+                    offer.offererId,
+                    'Teklif Kabul Edildi',
+                    notificationMessage,
+                    { type: 'offer_accepted', offerId: offerId }
           );
           
           // Send email notification
@@ -1056,24 +1069,24 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
           }
         }
       }
-    } else {
-      const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
-      
-      // Create notification for rejected offer
+        } else {
+          const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
+          
+          // Create notification for rejected offer
       await createNotification(
-        offer.offererId,
-        'offer_rejected',
-        'Teklif Reddedildi',
-        notificationMessage,
-        offerId
-      );
-      
-      // Send FCM notification
+            offer.offererId,
+            'offer_rejected',
+            'Teklif Reddedildi',
+            notificationMessage,
+            offerId
+          );
+          
+          // Send FCM notification
       await sendFCMNotification(
-        offer.offererId,
-        'Teklif Reddedildi',
-        notificationMessage,
-        { type: 'offer_rejected', offerId: offerId }
+            offer.offererId,
+            'Teklif Reddedildi',
+            notificationMessage,
+            { type: 'offer_rejected', offerId: offerId }
       );
       
       // Get offerer details for email notification
@@ -1087,9 +1100,9 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
           listing.foodName
         );
       }
-    }
+        }
 
-    res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
+        res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
   } catch (error) {
     console.error('Update offer status error:', error);
     res.status(500).json({ error: 'Teklif güncellenemedi' });
@@ -1099,14 +1112,14 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
 // Get user's listings
 app.get('/api/my-listings', authenticateToken, async (req, res) => {
   try {
-    const query = `
-      SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-      FROM food_listings fl
-      JOIN users u ON fl.userId = u.id
-      WHERE fl.userId = ?
-      ORDER BY fl.createdAt DESC
-    `;
-    
+  const query = `
+    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+    FROM food_listings fl
+    JOIN users u ON fl.userId = u.id
+    WHERE fl.userId = ?
+    ORDER BY fl.createdAt DESC
+  `;
+  
     const result = await dbQuery(query, [req.user.id]);
     res.json(result.rows);
   } catch (error) {
@@ -1118,15 +1131,15 @@ app.get('/api/my-listings', authenticateToken, async (req, res) => {
 // Get user's offers
 app.get('/api/my-offers', authenticateToken, async (req, res) => {
   try {
-    const query = `
-      SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
-      FROM exchange_offers eo
-      JOIN food_listings fl ON eo.listingId = fl.id
-      JOIN users u ON fl.userId = u.id
-      WHERE eo.offererId = ?
-      ORDER BY eo.createdAt DESC
-    `;
-    
+  const query = `
+    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
+    FROM exchange_offers eo
+    JOIN food_listings fl ON eo.listingId = fl.id
+    JOIN users u ON fl.userId = u.id
+    WHERE eo.offererId = ?
+    ORDER BY eo.createdAt DESC
+  `;
+  
     const result = await dbQuery(query, [req.user.id]);
     res.json(result.rows);
   } catch (error) {
@@ -1138,15 +1151,15 @@ app.get('/api/my-offers', authenticateToken, async (req, res) => {
 // Get offers for user's listings
 app.get('/api/listing-offers', authenticateToken, async (req, res) => {
   try {
-    const query = `
-      SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
-      FROM exchange_offers eo
-      JOIN food_listings fl ON eo.listingId = fl.id
-      JOIN users u ON eo.offererId = u.id
-      WHERE fl.userId = ?
-      ORDER BY eo.createdAt DESC
-    `;
-     
+  const query = `
+    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
+    FROM exchange_offers eo
+    JOIN food_listings fl ON eo.listingId = fl.id
+    JOIN users u ON eo.offererId = u.id
+    WHERE fl.userId = ?
+    ORDER BY eo.createdAt DESC
+  `;
+   
     const result = await dbQuery(query, [req.user.id]);
     res.json(result.rows);
   } catch (error) {
@@ -1404,7 +1417,7 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
     const result = await dbQuery(
-      'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
+    'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
       [req.user.id]
     );
     res.json(result.rows);
@@ -1417,48 +1430,48 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
 // Mark notification as read
 app.put('/api/notifications/:notificationId/read', authenticateToken, async (req, res) => {
   try {
-    const { notificationId } = req.params;
-    
+  const { notificationId } = req.params;
+  
     await dbRun(
-      'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
+    'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
       [notificationId, req.user.id]
     );
-    res.json({ message: 'Bildirim okundu olarak işaretlendi' });
+      res.json({ message: 'Bildirim okundu olarak işaretlendi' });
   } catch (error) {
     console.error('Mark notification read error:', error);
     res.status(500).json({ error: 'Bildirim güncellenemedi' });
-  }
+    }
 });
 
 // Get unread notification count
 app.get('/api/notifications/unread-count', authenticateToken, async (req, res) => {
   try {
     const result = await dbGet(
-      'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = 0',
+    'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = 0',
       [req.user.id]
     );
-    res.json({ count: result.count });
+      res.json({ count: result.count });
   } catch (error) {
     console.error('Get unread count error:', error);
     res.status(500).json({ error: 'Bildirim sayısı alınamadı' });
-  }
+    }
 });
 
 // Admin endpoints
 // Get all users (admin only)
 app.get('/api/admin/users', async (req, res) => {
   try {
-    // Check for admin credentials in URL parameters
-    const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
-    const email = urlParams.get('email');
-    const password = urlParams.get('password');
-    
-    const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-    const ADMIN_PASSWORD = 'mF3z4Vsf.';
-    
-    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-      return res.status(403).json({ error: 'Admin yetkisi gerekli' });
-    }
+  // Check for admin credentials in URL parameters
+  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+  const email = urlParams.get('email');
+  const password = urlParams.get('password');
+  
+  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+  const ADMIN_PASSWORD = 'mF3z4Vsf.';
+  
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Admin yetkisi gerekli' });
+  }
 
     const result = await dbQuery(
       'SELECT id, firstName, lastName, email, phone, role, province, district, neighborhood, isEmailVerified, createdAt FROM users ORDER BY createdAt DESC'
@@ -1473,36 +1486,36 @@ app.get('/api/admin/users', async (req, res) => {
 // Delete user (admin only)
 app.delete('/api/admin/users/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
-    
-    // Check for admin credentials in URL parameters
-    const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
-    const email = urlParams.get('email');
-    const password = urlParams.get('password');
-    
-    const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-    const ADMIN_PASSWORD = 'mF3z4Vsf.';
-    
-    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-      return res.status(403).json({ error: 'Admin yetkisi gerekli' });
-    }
+  const { userId } = req.params;
+  
+  // Check for admin credentials in URL parameters
+  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+  const email = urlParams.get('email');
+  const password = urlParams.get('password');
+  
+  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+  const ADMIN_PASSWORD = 'mF3z4Vsf.';
+  
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: 'Admin yetkisi gerekli' });
+  }
 
-    // Delete user's listings first
+  // Delete user's listings first
     await dbRun('DELETE FROM food_listings WHERE userId = ?', [userId]);
 
     // Delete user's offers
     await dbRun('DELETE FROM exchange_offers WHERE offererId = ?', [userId]);
 
-    // Delete user's notifications
+      // Delete user's notifications
     await dbRun('DELETE FROM notifications WHERE userId = ?', [userId]);
 
-    // Delete user's email verifications
+        // Delete user's email verifications
     await dbRun('DELETE FROM email_verifications WHERE userId = ?', [userId]);
 
-    // Finally delete the user
+          // Finally delete the user
     await dbRun('DELETE FROM users WHERE id = ?', [userId]);
     
-    res.json({ message: 'Kullanıcı başarıyla silindi' });
+            res.json({ message: 'Kullanıcı başarıyla silindi' });
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Kullanıcı silinemedi' });
@@ -1559,9 +1572,10 @@ app.get('/api/debug-users', async (req, res) => {
     const users = [];
     
     usersSnapshot.forEach(doc => {
+      const data = doc.data();
       users.push({
         id: doc.id,
-        ...doc.data()
+        ...data
       });
     });
     
@@ -1570,10 +1584,13 @@ app.get('/api/debug-users', async (req, res) => {
       users: users.map(user => ({
         id: user.id,
         email: user.email,
+        emailType: typeof user.email,
+        emailLength: user.email ? user.email.length : 'null',
         firstName: user.firstName,
         lastName: user.lastName,
         isEmailVerified: user.isEmailVerified,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        verificationToken: user.verificationToken ? 'exists' : 'null'
       }))
     });
   } catch (error) {
