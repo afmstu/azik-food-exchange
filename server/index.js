@@ -349,27 +349,27 @@ const sendFCMNotification = async (userId, title, body, data = {}) => {
     }
 
     // Get user's FCM token
-    const user = await dbGet('SELECT fcmToken FROM users WHERE id = ?', [userId]);
+    const user = await dbGet('users', userId);
     if (!user || !user.fcmToken) {
-        console.log('FCM token not found for user:', userId);
-        return;
-      }
+      console.log('FCM token not found for user:', userId);
+      return;
+    }
 
-      const message = {
-        notification: {
-          title: title,
-          body: body
-        },
-        data: data,
-        token: user.fcmToken
-      };
+    const message = {
+      notification: {
+        title: title,
+        body: body
+      },
+      data: data,
+      token: user.fcmToken
+    };
 
-      try {
-        const response = await admin.messaging().send(message);
-        console.log('FCM notification sent successfully:', response);
-      } catch (error) {
-        console.error('Error sending FCM notification:', error);
-      }
+    try {
+      const response = await admin.messaging().send(message);
+      console.log('FCM notification sent successfully:', response);
+    } catch (error) {
+      console.error('Error sending FCM notification:', error);
+    }
   } catch (error) {
     console.error('Error in sendFCMNotification:', error);
   }
@@ -767,7 +767,7 @@ app.post('/api/resend-verification', async (req, res) => {
     }
 
     // Find user
-    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
+    const user = await dbGet('users', null, { email: email });
 
       if (!user) {
         return res.status(404).json({ error: 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı' });
@@ -778,17 +778,26 @@ app.post('/api/resend-verification', async (req, res) => {
       }
 
       // Delete old verification records
-    await dbRun('DELETE FROM email_verifications WHERE userId = ?', [user.id]);
+      const oldVerificationsSnapshot = await db.collection('email_verifications')
+        .where('userId', '==', user.id)
+        .get();
+      
+      const deletePromises = oldVerificationsSnapshot.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletePromises);
 
-        // Create new verification token
-        const verificationToken = uuidv4();
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      // Create new verification token
+      const verificationToken = uuidv4();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        // Insert new verification record
-    await dbRun(
-          'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
-      [uuidv4(), user.id, email, verificationToken, expiresAt.toISOString()]
-    );
+      // Insert new verification record
+      const verificationData = {
+        userId: user.id,
+        email,
+        verificationToken,
+        expiresAt: expiresAt.toISOString()
+      };
+
+      await dbRun('email_verifications', verificationData);
 
             // Send verification email
             const emailSent = await sendVerificationEmail(email, verificationToken);
@@ -807,7 +816,7 @@ app.post('/api/resend-verification', async (req, res) => {
 // Get current user profile
 app.get('/api/user/profile', authenticateToken, async (req, res) => {
   try {
-    const user = await dbGet('SELECT id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, createdAt FROM users WHERE id = ?', [req.user.id]);
+    const user = await dbGet('users', req.user.id);
 
     if (!user) {
       return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
@@ -829,7 +838,7 @@ app.post('/api/user/fcm-token', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'FCM token zorunludur' });
   }
 
-    await dbRun('UPDATE users SET fcmToken = ? WHERE id = ?', [fcmToken, req.user.id]);
+    await dbUpdate('users', req.user.id, { fcmToken });
     res.json({ message: 'FCM token başarıyla kaydedildi' });
   } catch (error) {
     console.error('FCM token save error:', error);
@@ -840,35 +849,41 @@ app.post('/api/user/fcm-token', authenticateToken, async (req, res) => {
 // Create food listing
 app.post('/api/listings', authenticateToken, async (req, res) => {
   try {
-  const { foodName, quantity, details, startTime, endTime } = req.body;
-  const userId = req.user.id;
+    const { foodName, quantity, details, startTime, endTime } = req.body;
+    const userId = req.user.id;
 
-  if (!foodName || !quantity || !startTime || !endTime) {
-    return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
-  }
+    if (!foodName || !quantity || !startTime || !endTime) {
+      return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
+    }
 
-  const listingId = uuidv4();
+    const listingData = {
+      userId,
+      foodName,
+      quantity,
+      details: details || '',
+      startTime,
+      endTime,
+      status: 'active',
+      createdAt: new Date().toISOString()
+    };
 
-    await dbRun(
-    'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [listingId, userId, foodName, quantity, details, startTime, endTime, 'active']
-    );
+    const result = await dbRun('food_listings', listingData);
     
-      res.status(201).json({ message: 'İlan başarıyla oluşturuldu', listingId });
+    res.status(201).json({ message: 'İlan başarıyla oluşturuldu', listingId: result.lastID });
   } catch (error) {
     console.error('Create listing error:', error);
     res.status(500).json({ error: 'İlan oluşturulamadı' });
-    }
+  }
 });
 
 // Delete food listing
 app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
   try {
-  const { listingId } = req.params;
-  const userId = req.user.id;
+    const { listingId } = req.params;
+    const userId = req.user.id;
 
-  // Check if listing exists and belongs to user
-    const listing = await dbGet('SELECT * FROM food_listings WHERE id = ?', [listingId]);
+    // Check if listing exists and belongs to user
+    const listing = await dbGet('food_listings', listingId);
 
     if (!listing) {
       return res.status(404).json({ error: 'İlan bulunamadı' });
@@ -879,12 +894,17 @@ app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
     }
 
     // Delete related offers first
-    await dbRun('DELETE FROM exchange_offers WHERE listingId = ?', [listingId]);
-
-      // Delete the listing
-    await dbRun('DELETE FROM food_listings WHERE id = ?', [listingId]);
+    const offersSnapshot = await db.collection('exchange_offers')
+      .where('listingId', '==', listingId)
+      .get();
     
-        res.json({ message: 'İlan başarıyla silindi' });
+    const deletePromises = offersSnapshot.docs.map(doc => doc.ref.delete());
+    await Promise.all(deletePromises);
+
+    // Delete the listing
+    await db.collection('food_listings').doc(listingId).delete();
+    
+    res.json({ message: 'İlan başarıyla silindi' });
   } catch (error) {
     console.error('Delete listing error:', error);
     res.status(500).json({ error: 'İlan silinemedi' });
@@ -894,29 +914,44 @@ app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
 // Get all active listings
 app.get('/api/listings', async (req, res) => {
   try {
-  const { province, district } = req.query;
-  
-  let query = `
-    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-    FROM food_listings fl
-    JOIN users u ON fl.userId = u.id
-    WHERE fl.status = 'active'
-  `;
-  let params = [];
-
-  if (province) {
-    query += ' AND u.province = ?';
-    params.push(province);
-  }
-  if (district) {
-    query += ' AND u.district = ?';
-    params.push(district);
-  }
-
-  query += ' ORDER BY fl.createdAt DESC';
-
-    const result = await dbQuery(query, params);
-    res.json(result.rows);
+    const { province, district } = req.query;
+    
+    // Get all active listings with user information
+    let listingsQuery = db.collection('food_listings')
+      .where('status', '==', 'active');
+    
+    const listingsSnapshot = await listingsQuery.get();
+    const listings = [];
+    
+    for (const listingDoc of listingsSnapshot.docs) {
+      const listingData = listingDoc.data();
+      
+      // Get user information for this listing
+      const userDoc = await db.collection('users').doc(listingData.userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        
+        // Apply filters if provided
+        if (province && userData.province !== province) continue;
+        if (district && userData.district !== district) continue;
+        
+        listings.push({
+          id: listingDoc.id,
+          ...listingData,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          phone: userData.phone,
+          province: userData.province,
+          district: userData.district,
+          neighborhood: userData.neighborhood
+        });
+      }
+    }
+    
+    // Sort by createdAt descending
+    listings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.json(listings);
   } catch (error) {
     console.error('Get listings error:', error);
     res.status(500).json({ error: 'İlanlar getirilemedi' });
@@ -926,17 +961,17 @@ app.get('/api/listings', async (req, res) => {
 // Create exchange offer
 app.post('/api/offers', authenticateToken, async (req, res) => {
   try {
-  const { listingId } = req.body;
-  const offererId = req.user.id;
+    const { listingId } = req.body;
+    const offererId = req.user.id;
 
-  if (!listingId) {
-    return res.status(400).json({ error: 'İlan ID zorunludur' });
-  }
+    if (!listingId) {
+      return res.status(400).json({ error: 'İlan ID zorunludur' });
+    }
 
-  // Check if listing exists and is active
-    const listing = await dbGet('SELECT * FROM food_listings WHERE id = ? AND status = "active"', [listingId]);
+    // Check if listing exists and is active
+    const listing = await dbGet('food_listings', listingId);
     
-    if (!listing) {
+    if (!listing || listing.status !== 'active') {
       return res.status(404).json({ error: 'İlan bulunamadı' });
     }
 
@@ -945,44 +980,50 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
     }
 
     // Check if user already made an offer
-    const existingOffer = await dbGet('SELECT * FROM exchange_offers WHERE listingId = ? AND offererId = ?', [listingId, offererId]);
+    const existingOffersSnapshot = await db.collection('exchange_offers')
+      .where('listingId', '==', listingId)
+      .where('offererId', '==', offererId)
+      .get();
 
-      if (existingOffer) {
-        return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
-      }
+    if (!existingOffersSnapshot.empty) {
+      return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
+    }
 
-      const offerId = uuidv4();
+    const offerData = {
+      listingId,
+      offererId,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
 
-    await dbRun(
-        'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
-      [offerId, listingId, offererId]
-    );
+    const result = await dbRun('exchange_offers', offerData);
+    const offerId = result.lastID;
           
-          // Get offerer details for notification
-    const offerer = await dbGet('SELECT firstName, lastName FROM users WHERE id = ?', [offererId]);
+    // Get offerer details for notification
+    const offerer = await dbGet('users', offererId);
     
     if (offerer) {
-              const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
-              
-              // Create notification for listing owner
+      const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
+      
+      // Create notification for listing owner
       await createNotification(
-                listing.userId,
-                'new_offer',
-                'Yeni Teklif',
-                notificationMessage,
-                offerId
-              );
-              
-              // Send FCM notification
+        listing.userId,
+        'new_offer',
+        'Yeni Teklif',
+        notificationMessage,
+        offerId
+      );
+      
+      // Send FCM notification
       await sendFCMNotification(
-                listing.userId,
-                'Yeni Teklif',
-                notificationMessage,
-                { type: 'new_offer', offerId: offerId }
+        listing.userId,
+        'Yeni Teklif',
+        notificationMessage,
+        { type: 'new_offer', offerId: offerId }
       );
       
       // Get listing owner's email for email notification
-      const owner = await dbGet('SELECT email FROM users WHERE id = ?', [listing.userId]);
+      const owner = await dbGet('users', listing.userId);
       
       if (owner && owner.email) {
         // Send email notification
@@ -994,75 +1035,75 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
       }
     }
           
-          res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
+    res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
   } catch (error) {
     console.error('Create offer error:', error);
     res.status(500).json({ error: 'Teklif oluşturulamadı' });
-        }
+  }
 });
 
 // Accept/Reject offer
 app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
   try {
-  const { offerId } = req.params;
-  const { status } = req.body; // 'accepted' or 'rejected'
+    const { offerId } = req.params;
+    const { status } = req.body; // 'accepted' or 'rejected'
 
-  if (!['accepted', 'rejected'].includes(status)) {
-    return res.status(400).json({ error: 'Geçersiz durum' });
-  }
+    if (!['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Geçersiz durum' });
+    }
 
-    const offer = await dbGet('SELECT * FROM exchange_offers WHERE id = ?', [offerId]);
+    const offer = await dbGet('exchange_offers', offerId);
     
     if (!offer) {
       return res.status(404).json({ error: 'Teklif bulunamadı' });
     }
 
     // Get listing details
-    const listing = await dbGet('SELECT * FROM food_listings WHERE id = ?', [offer.listingId]);
+    const listing = await dbGet('food_listings', offer.listingId);
     
     if (!listing) {
-        return res.status(404).json({ error: 'İlan bulunamadı' });
-      }
+      return res.status(404).json({ error: 'İlan bulunamadı' });
+    }
 
-      // Check if user owns the listing
-      if (listing.userId !== req.user.id) {
-        return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
-      }
+    // Check if user owns the listing
+    if (listing.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    }
 
-    await dbRun('UPDATE exchange_offers SET status = ? WHERE id = ?', [status, offerId]);
+    await dbUpdate('exchange_offers', offerId, { status });
 
-        if (status === 'accepted') {
-          // Mark listing as completed
-      await dbRun('UPDATE food_listings SET status = "completed" WHERE id = ?', [offer.listingId]);
-          
-          // Get user details for notification
-      const offerer = await dbGet('SELECT phone, firstName, lastName, email FROM users WHERE id = ?', [offer.offererId]);
+    if (status === 'accepted') {
+      // Mark listing as completed
+      await dbUpdate('food_listings', offer.listingId, { status: 'completed' });
+      
+      // Get user details for notification
+      const offerer = await dbGet('users', offer.offererId);
       
       if (offerer) {
-              // Get listing owner's phone number
-        const listingOwner = await dbGet('SELECT phone FROM users WHERE id = ?', [req.user.id]);
+        // Get listing owner's phone number
+        const listingOwner = await dbGet('users', req.user.id);
         
         if (listingOwner) {
-                  // In a real app, you'd send SMS here
-                  console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
-                  
-                  const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
-                  
-                  // Create notification for offerer
+          // In a real app, you'd send SMS here
+          console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
+          
+          const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
+          
+          // Create notification for offerer
           await createNotification(
-                    offer.offererId,
-                    'offer_accepted',
-                    'Teklif Kabul Edildi',
-                    notificationMessage,
-                    offerId
-                  );
-                  
-                  // Send FCM notification
+            offer.offererId,
+            'offer_accepted',
+            'Teklif Kabul Edildi',
+            notificationMessage,
+            offerId
+          );
+          
+          // Send FCM notification
           await sendFCMNotification(
-                    offer.offererId,
-                    'Teklif Kabul Edildi',
-                    notificationMessage,
-                    { type: 'offer_accepted', offerId: offerId }
+            offer.offererId,
+            'Teklif Kabul Edildi',
+            notificationMessage,
+            { type: 'offer_accepted', offerId: offerId }
           );
           
           // Send email notification
@@ -1076,28 +1117,28 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
           }
         }
       }
-        } else {
-          const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
-          
-          // Create notification for rejected offer
+    } else {
+      const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
+      
+      // Create notification for rejected offer
       await createNotification(
-            offer.offererId,
-            'offer_rejected',
-            'Teklif Reddedildi',
-            notificationMessage,
-            offerId
-          );
-          
-          // Send FCM notification
+        offer.offererId,
+        'offer_rejected',
+        'Teklif Reddedildi',
+        notificationMessage,
+        offerId
+      );
+      
+      // Send FCM notification
       await sendFCMNotification(
-            offer.offererId,
-            'Teklif Reddedildi',
-            notificationMessage,
-            { type: 'offer_rejected', offerId: offerId }
+        offer.offererId,
+        'Teklif Reddedildi',
+        notificationMessage,
+        { type: 'offer_rejected', offerId: offerId }
       );
       
       // Get offerer details for email notification
-      const offerer = await dbGet('SELECT firstName, lastName, email FROM users WHERE id = ?', [offer.offererId]);
+      const offerer = await dbGet('users', offer.offererId);
       
       if (offerer && offerer.email) {
         // Send email notification
@@ -1107,11 +1148,11 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
           listing.foodName
         );
       }
-        }
+    }
 
-        res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
+    res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
   } catch (error) {
-    console.error('Update offer status error:', error);
+    console.error('Update offer error:', error);
     res.status(500).json({ error: 'Teklif güncellenemedi' });
   }
 });
@@ -1119,16 +1160,35 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
 // Get user's listings
 app.get('/api/my-listings', authenticateToken, async (req, res) => {
   try {
-  const query = `
-    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-    FROM food_listings fl
-    JOIN users u ON fl.userId = u.id
-    WHERE fl.userId = ?
-    ORDER BY fl.createdAt DESC
-  `;
-  
-    const result = await dbQuery(query, [req.user.id]);
-    res.json(result.rows);
+    const listingsSnapshot = await db.collection('food_listings')
+      .where('userId', '==', req.user.id)
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    const listings = [];
+    
+    for (const listingDoc of listingsSnapshot.docs) {
+      const listingData = listingDoc.data();
+      
+      // Get user information for this listing
+      const userDoc = await db.collection('users').doc(listingData.userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        
+        listings.push({
+          id: listingDoc.id,
+          ...listingData,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          phone: userData.phone,
+          province: userData.province,
+          district: userData.district,
+          neighborhood: userData.neighborhood
+        });
+      }
+    }
+    
+    res.json(listings);
   } catch (error) {
     console.error('Get my listings error:', error);
     res.status(500).json({ error: 'İlanlar getirilemedi' });
@@ -1138,17 +1198,45 @@ app.get('/api/my-listings', authenticateToken, async (req, res) => {
 // Get user's offers
 app.get('/api/my-offers', authenticateToken, async (req, res) => {
   try {
-  const query = `
-    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
-    FROM exchange_offers eo
-    JOIN food_listings fl ON eo.listingId = fl.id
-    JOIN users u ON fl.userId = u.id
-    WHERE eo.offererId = ?
-    ORDER BY eo.createdAt DESC
-  `;
-  
-    const result = await dbQuery(query, [req.user.id]);
-    res.json(result.rows);
+    const offersSnapshot = await db.collection('exchange_offers')
+      .where('offererId', '==', req.user.id)
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    const offers = [];
+    
+    for (const offerDoc of offersSnapshot.docs) {
+      const offerData = offerDoc.data();
+      
+      // Get listing information
+      const listingDoc = await db.collection('food_listings').doc(offerData.listingId).get();
+      if (listingDoc.exists) {
+        const listingData = listingDoc.data();
+        
+        // Get listing owner information
+        const userDoc = await db.collection('users').doc(listingData.userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          
+          offers.push({
+            id: offerDoc.id,
+            ...offerData,
+            foodName: listingData.foodName,
+            quantity: listingData.quantity,
+            details: listingData.details,
+            startTime: listingData.startTime,
+            endTime: listingData.endTime,
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            phone: userData.phone,
+            province: userData.province,
+            district: userData.district
+          });
+        }
+      }
+    }
+    
+    res.json(offers);
   } catch (error) {
     console.error('Get my offers error:', error);
     res.status(500).json({ error: 'Teklifler getirilemedi' });
@@ -1158,17 +1246,52 @@ app.get('/api/my-offers', authenticateToken, async (req, res) => {
 // Get offers for user's listings
 app.get('/api/listing-offers', authenticateToken, async (req, res) => {
   try {
-  const query = `
-    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
-    FROM exchange_offers eo
-    JOIN food_listings fl ON eo.listingId = fl.id
-    JOIN users u ON eo.offererId = u.id
-    WHERE fl.userId = ?
-    ORDER BY eo.createdAt DESC
-  `;
-   
-    const result = await dbQuery(query, [req.user.id]);
-    res.json(result.rows);
+    // First get all listings by this user
+    const listingsSnapshot = await db.collection('food_listings')
+      .where('userId', '==', req.user.id)
+      .get();
+    
+    const offers = [];
+    
+    for (const listingDoc of listingsSnapshot.docs) {
+      const listingData = listingDoc.data();
+      
+      // Get offers for this listing
+      const listingOffersSnapshot = await db.collection('exchange_offers')
+        .where('listingId', '==', listingDoc.id)
+        .orderBy('createdAt', 'desc')
+        .get();
+      
+      for (const offerDoc of listingOffersSnapshot.docs) {
+        const offerData = offerDoc.data();
+        
+        // Get offerer information
+        const offererDoc = await db.collection('users').doc(offerData.offererId).get();
+        if (offererDoc.exists) {
+          const offererData = offererDoc.data();
+          
+          offers.push({
+            id: offerDoc.id,
+            ...offerData,
+            foodName: listingData.foodName,
+            quantity: listingData.quantity,
+            details: listingData.details,
+            startTime: listingData.startTime,
+            endTime: listingData.endTime,
+            firstName: offererData.firstName,
+            lastName: offererData.lastName,
+            phone: offererData.phone,
+            province: offererData.province,
+            district: offererData.district
+          });
+        }
+      }
+    }
+    
+    // Sort by createdAt descending
+    offers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.json(offers);
   } catch (error) {
     console.error('Get listing offers error:', error);
     res.status(500).json({ error: 'Teklifler getirilemedi' });
@@ -1423,11 +1546,18 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
 // Get user notifications
 app.get('/api/notifications', authenticateToken, async (req, res) => {
   try {
-    const result = await dbQuery(
-    'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
-      [req.user.id]
-    );
-    res.json(result.rows);
+    const notificationsSnapshot = await db.collection('notifications')
+      .where('userId', '==', req.user.id)
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    
+    const notifications = notificationsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    res.json(notifications);
   } catch (error) {
     console.error('Get notifications error:', error);
     res.status(500).json({ error: 'Bildirimler yüklenemedi' });
@@ -1439,10 +1569,7 @@ app.put('/api/notifications/:notificationId/read', authenticateToken, async (req
   try {
   const { notificationId } = req.params;
   
-    await dbRun(
-    'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
-      [notificationId, req.user.id]
-    );
+    await dbUpdate('notifications', notificationId, { isRead: true });
       res.json({ message: 'Bildirim okundu olarak işaretlendi' });
   } catch (error) {
     console.error('Mark notification read error:', error);
@@ -1453,15 +1580,18 @@ app.put('/api/notifications/:notificationId/read', authenticateToken, async (req
 // Get unread notification count
 app.get('/api/notifications/unread-count', authenticateToken, async (req, res) => {
   try {
-    const result = await dbGet(
-    'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = 0',
-      [req.user.id]
-    );
-      res.json({ count: result.count });
+    // Get notifications for the user that are unread
+    const notificationsSnapshot = await db.collection('notifications')
+      .where('userId', '==', req.user.id)
+      .where('isRead', '==', false)
+      .get();
+    
+    const count = notificationsSnapshot.size;
+    res.json({ count });
   } catch (error) {
     console.error('Get unread count error:', error);
     res.status(500).json({ error: 'Bildirim sayısı alınamadı' });
-    }
+  }
 });
 
 // Admin endpoints
@@ -1480,10 +1610,16 @@ app.get('/api/admin/users', async (req, res) => {
     return res.status(403).json({ error: 'Admin yetkisi gerekli' });
   }
 
-    const result = await dbQuery(
-      'SELECT id, firstName, lastName, email, phone, role, province, district, neighborhood, isEmailVerified, createdAt FROM users ORDER BY createdAt DESC'
-    );
-    res.json(result.rows);
+    const usersSnapshot = await db.collection('users')
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    const users = usersSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    res.json(users);
   } catch (error) {
     console.error('Get admin users error:', error);
     res.status(500).json({ error: 'Kullanıcılar getirilemedi' });
@@ -1508,19 +1644,39 @@ app.delete('/api/admin/users/:userId', async (req, res) => {
   }
 
   // Delete user's listings first
-    await dbRun('DELETE FROM food_listings WHERE userId = ?', [userId]);
+    const listingsSnapshot = await db.collection('food_listings')
+      .where('userId', '==', userId)
+      .get();
+    
+    const listingDeletePromises = listingsSnapshot.docs.map(doc => doc.ref.delete());
+    await Promise.all(listingDeletePromises);
 
     // Delete user's offers
-    await dbRun('DELETE FROM exchange_offers WHERE offererId = ?', [userId]);
+    const offersSnapshot = await db.collection('exchange_offers')
+      .where('offererId', '==', userId)
+      .get();
+    
+    const offerDeletePromises = offersSnapshot.docs.map(doc => doc.ref.delete());
+    await Promise.all(offerDeletePromises);
 
-      // Delete user's notifications
-    await dbRun('DELETE FROM notifications WHERE userId = ?', [userId]);
+    // Delete user's notifications
+    const notificationsSnapshot = await db.collection('notifications')
+      .where('userId', '==', userId)
+      .get();
+    
+    const notificationDeletePromises = notificationsSnapshot.docs.map(doc => doc.ref.delete());
+    await Promise.all(notificationDeletePromises);
 
-        // Delete user's email verifications
-    await dbRun('DELETE FROM email_verifications WHERE userId = ?', [userId]);
+    // Delete user's email verifications
+    const verificationsSnapshot = await db.collection('email_verifications')
+      .where('userId', '==', userId)
+      .get();
+    
+    const verificationDeletePromises = verificationsSnapshot.docs.map(doc => doc.ref.delete());
+    await Promise.all(verificationDeletePromises);
 
-          // Finally delete the user
-    await dbRun('DELETE FROM users WHERE id = ?', [userId]);
+    // Finally delete the user
+    await db.collection('users').doc(userId).delete();
     
             res.json({ message: 'Kullanıcı başarıyla silindi' });
   } catch (error) {
@@ -1538,7 +1694,14 @@ app.get('/api/debug-token/:token', async (req, res) => {
       return res.status(400).json({ error: 'Token gerekli' });
     }
 
-    const verification = await dbGet('SELECT * FROM email_verifications WHERE verificationToken = ?', [token]);
+    const verificationsSnapshot = await db.collection('email_verifications')
+      .where('verificationToken', '==', token)
+      .get();
+    
+    const verification = verificationsSnapshot.empty ? null : {
+      id: verificationsSnapshot.docs[0].id,
+      ...verificationsSnapshot.docs[0].data()
+    };
 
     if (!verification) {
       return res.json({ 
