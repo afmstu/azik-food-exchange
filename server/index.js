@@ -23,15 +23,8 @@ app.use(express.static(path.join(__dirname, '../client/build')));
 // Database setup
 const db = new sqlite3.Database('./azik.db');
 
-// Create tables and clear all data
+// Create tables
 db.serialize(() => {
-  // Drop existing tables
-  db.run('DROP TABLE IF EXISTS notifications');
-  db.run('DROP TABLE IF EXISTS exchange_offers');
-  db.run('DROP TABLE IF EXISTS food_listings');
-  db.run('DROP TABLE IF EXISTS email_verifications');
-  db.run('DROP TABLE IF EXISTS users');
-  
   // Users table
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -102,7 +95,7 @@ db.serialize(() => {
     FOREIGN KEY (userId) REFERENCES users (id)
   )`);
   
-  console.log('Database reset complete - all data cleared!');
+  console.log('Database tables ready!');
 });
 
 // JWT Secret
@@ -1476,4 +1469,41 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// Debug token endpoint (for troubleshooting)
+app.get('/api/debug-token/:token', (req, res) => {
+  const { token } = req.params;
+  
+  if (!token) {
+    return res.status(400).json({ error: 'Token gerekli' });
+  }
+
+  db.get('SELECT * FROM email_verifications WHERE verificationToken = ?', [token], (err, verification) => {
+    if (err) {
+      return res.status(500).json({ error: 'Veritabanı hatası', details: err.message });
+    }
+
+    if (!verification) {
+      return res.json({ 
+        found: false, 
+        message: 'Token bulunamadı - muhtemelen süresi dolmuş veya zaten kullanılmış' 
+      });
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(verification.expiresAt);
+    const isExpired = now > expiresAt;
+
+    return res.json({
+      found: true,
+      token: verification.verificationToken,
+      userId: verification.userId,
+      email: verification.email,
+      createdAt: verification.createdAt,
+      expiresAt: verification.expiresAt,
+      isExpired: isExpired,
+      timeLeft: isExpired ? 'Süresi dolmuş' : `${Math.floor((expiresAt - now) / (1000 * 60 * 60))} saat kaldı`
+    });
+  });
 });
