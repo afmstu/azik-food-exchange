@@ -370,25 +370,25 @@ const sendFCMNotification = async (userId, title, body, data = {}) => {
     // Get user's FCM token
     const user = await dbGet('users', userId);
     if (!user || !user.fcmToken) {
-      console.log('FCM token not found for user:', userId);
-      return;
-    }
+        console.log('FCM token not found for user:', userId);
+        return;
+      }
 
-    const message = {
-      notification: {
-        title: title,
-        body: body
-      },
-      data: data,
-      token: user.fcmToken
-    };
+      const message = {
+        notification: {
+          title: title,
+          body: body
+        },
+        data: data,
+        token: user.fcmToken
+      };
 
-    try {
-      const response = await admin.messaging().send(message);
-      console.log('FCM notification sent successfully:', response);
-    } catch (error) {
-      console.error('Error sending FCM notification:', error);
-    }
+      try {
+        const response = await admin.messaging().send(message);
+        console.log('FCM notification sent successfully:', response);
+      } catch (error) {
+        console.error('Error sending FCM notification:', error);
+      }
   } catch (error) {
     console.error('Error in sendFCMNotification:', error);
   }
@@ -804,11 +804,11 @@ app.post('/api/resend-verification', async (req, res) => {
       const deletePromises = oldVerificationsSnapshot.docs.map(doc => doc.ref.delete());
       await Promise.all(deletePromises);
 
-      // Create new verification token
-      const verificationToken = uuidv4();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        // Create new verification token
+        const verificationToken = uuidv4();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      // Insert new verification record
+        // Insert new verification record
       const verificationData = {
         userId: user.id,
         email,
@@ -868,12 +868,12 @@ app.post('/api/user/fcm-token', authenticateToken, async (req, res) => {
 // Create food listing
 app.post('/api/listings', authenticateToken, async (req, res) => {
   try {
-    const { foodName, quantity, details, startTime, endTime } = req.body;
-    const userId = req.user.id;
+  const { foodName, quantity, details, startTime, endTime } = req.body;
+  const userId = req.user.id;
 
-    if (!foodName || !quantity || !startTime || !endTime) {
-      return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
-    }
+  if (!foodName || !quantity || !startTime || !endTime) {
+    return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
+  }
 
     const listingData = {
       userId,
@@ -898,10 +898,10 @@ app.post('/api/listings', authenticateToken, async (req, res) => {
 // Delete food listing
 app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
   try {
-    const { listingId } = req.params;
-    const userId = req.user.id;
+  const { listingId } = req.params;
+  const userId = req.user.id;
 
-    // Check if listing exists and belongs to user
+  // Check if listing exists and belongs to user
     const listing = await dbGet('food_listings', listingId);
 
     if (!listing) {
@@ -920,10 +920,10 @@ app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
     const deletePromises = offersSnapshot.docs.map(doc => doc.ref.delete());
     await Promise.all(deletePromises);
 
-    // Delete the listing
+      // Delete the listing
     await db.collection('food_listings').doc(listingId).delete();
     
-    res.json({ message: 'İlan başarıyla silindi' });
+        res.json({ message: 'İlan başarıyla silindi' });
   } catch (error) {
     console.error('Delete listing error:', error);
     res.status(500).json({ error: 'İlan silinemedi' });
@@ -933,8 +933,8 @@ app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
 // Get all active listings
 app.get('/api/listings', async (req, res) => {
   try {
-    const { province, district } = req.query;
-    
+  const { province, district } = req.query;
+  
     // Get all active listings with user information
     let listingsQuery = db.collection('food_listings')
       .where('status', '==', 'active');
@@ -980,14 +980,14 @@ app.get('/api/listings', async (req, res) => {
 // Create exchange offer
 app.post('/api/offers', authenticateToken, async (req, res) => {
   try {
-    const { listingId } = req.body;
-    const offererId = req.user.id;
+  const { listingId } = req.body;
+  const offererId = req.user.id;
 
-    if (!listingId) {
-      return res.status(400).json({ error: 'İlan ID zorunludur' });
-    }
+  if (!listingId) {
+    return res.status(400).json({ error: 'İlan ID zorunludur' });
+  }
 
-    // Check if listing exists and is active
+  // Check if listing exists and is active
     const listing = await dbGet('food_listings', listingId);
     
     if (!listing || listing.status !== 'active') {
@@ -1005,8 +1005,8 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
       .get();
 
     if (!existingOffersSnapshot.empty) {
-      return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
-    }
+        return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
+      }
 
     const offerData = {
       listingId,
@@ -1018,27 +1018,27 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
     const result = await dbRun('exchange_offers', offerData);
     const offerId = result.lastID;
           
-    // Get offerer details for notification
+          // Get offerer details for notification
     const offerer = await dbGet('users', offererId);
     
     if (offerer) {
-      const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
-      
-      // Create notification for listing owner
+              const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
+              
+              // Create notification for listing owner
       await createNotification(
-        listing.userId,
-        'new_offer',
-        'Yeni Teklif',
-        notificationMessage,
-        offerId
-      );
-      
-      // Send FCM notification
+                listing.userId,
+                'new_offer',
+                'Yeni Teklif',
+                notificationMessage,
+                offerId
+              );
+              
+              // Send FCM notification
       await sendFCMNotification(
-        listing.userId,
-        'Yeni Teklif',
-        notificationMessage,
-        { type: 'new_offer', offerId: offerId }
+                listing.userId,
+                'Yeni Teklif',
+                notificationMessage,
+                { type: 'new_offer', offerId: offerId }
       );
       
       // Get listing owner's email for email notification
@@ -1054,22 +1054,22 @@ app.post('/api/offers', authenticateToken, async (req, res) => {
       }
     }
           
-    res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
+          res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
   } catch (error) {
     console.error('Create offer error:', error);
     res.status(500).json({ error: 'Teklif oluşturulamadı' });
-  }
+        }
 });
 
 // Accept/Reject offer
 app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
   try {
-    const { offerId } = req.params;
-    const { status } = req.body; // 'accepted' or 'rejected'
+  const { offerId } = req.params;
+  const { status } = req.body; // 'accepted' or 'rejected'
 
-    if (!['accepted', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Geçersiz durum' });
-    }
+  if (!['accepted', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Geçersiz durum' });
+  }
 
     const offer = await dbGet('exchange_offers', offerId);
     
@@ -1081,48 +1081,48 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
     const listing = await dbGet('food_listings', offer.listingId);
     
     if (!listing) {
-      return res.status(404).json({ error: 'İlan bulunamadı' });
-    }
+        return res.status(404).json({ error: 'İlan bulunamadı' });
+      }
 
-    // Check if user owns the listing
-    if (listing.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
-    }
+      // Check if user owns the listing
+      if (listing.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+      }
 
     await dbUpdate('exchange_offers', offerId, { status });
 
-    if (status === 'accepted') {
-      // Mark listing as completed
+        if (status === 'accepted') {
+          // Mark listing as completed
       await dbUpdate('food_listings', offer.listingId, { status: 'completed' });
-      
-      // Get user details for notification
+          
+          // Get user details for notification
       const offerer = await dbGet('users', offer.offererId);
       
       if (offerer) {
-        // Get listing owner's phone number
+              // Get listing owner's phone number
         const listingOwner = await dbGet('users', req.user.id);
         
         if (listingOwner) {
-          // In a real app, you'd send SMS here
-          console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
-          
-          const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
-          
-          // Create notification for offerer
+                  // In a real app, you'd send SMS here
+                  console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
+                  
+                  const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
+                  
+                  // Create notification for offerer
           await createNotification(
-            offer.offererId,
-            'offer_accepted',
-            'Teklif Kabul Edildi',
-            notificationMessage,
-            offerId
-          );
-          
-          // Send FCM notification
+                    offer.offererId,
+                    'offer_accepted',
+                    'Teklif Kabul Edildi',
+                    notificationMessage,
+                    offerId
+                  );
+                  
+                  // Send FCM notification
           await sendFCMNotification(
-            offer.offererId,
-            'Teklif Kabul Edildi',
-            notificationMessage,
-            { type: 'offer_accepted', offerId: offerId }
+                    offer.offererId,
+                    'Teklif Kabul Edildi',
+                    notificationMessage,
+                    { type: 'offer_accepted', offerId: offerId }
           );
           
           // Send email notification
@@ -1136,24 +1136,24 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
           }
         }
       }
-    } else {
-      const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
-      
-      // Create notification for rejected offer
+        } else {
+          const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
+          
+          // Create notification for rejected offer
       await createNotification(
-        offer.offererId,
-        'offer_rejected',
-        'Teklif Reddedildi',
-        notificationMessage,
-        offerId
-      );
-      
-      // Send FCM notification
+            offer.offererId,
+            'offer_rejected',
+            'Teklif Reddedildi',
+            notificationMessage,
+            offerId
+          );
+          
+          // Send FCM notification
       await sendFCMNotification(
-        offer.offererId,
-        'Teklif Reddedildi',
-        notificationMessage,
-        { type: 'offer_rejected', offerId: offerId }
+            offer.offererId,
+            'Teklif Reddedildi',
+            notificationMessage,
+            { type: 'offer_rejected', offerId: offerId }
       );
       
       // Get offerer details for email notification
@@ -1167,9 +1167,9 @@ app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
           listing.foodName
         );
       }
-    }
+        }
 
-    res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
+        res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
   } catch (error) {
     console.error('Update offer error:', error);
     res.status(500).json({ error: 'Teklif güncellenemedi' });
@@ -1607,11 +1607,11 @@ app.get('/api/notifications', authenticateToken, async (req, res) => {
     // Sort by createdAt descending in memory
     notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
-    res.json(notifications);
+      res.json(notifications);
   } catch (error) {
     console.error('Get notifications error:', error);
     res.status(500).json({ error: 'Bildirimler yüklenemedi' });
-  }
+    }
 });
 
 // Mark notification as read
@@ -1671,11 +1671,11 @@ app.get('/api/admin/users', async (req, res) => {
     // Sort by createdAt descending in memory
     users.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
-    res.json(users);
+      res.json(users);
   } catch (error) {
     console.error('Get admin users error:', error);
     res.status(500).json({ error: 'Kullanıcılar getirilemedi' });
-  }
+    }
 });
 
 // Delete user (admin only)
@@ -1711,7 +1711,7 @@ app.delete('/api/admin/users/:userId', async (req, res) => {
     const offerDeletePromises = offersSnapshot.docs.map(doc => doc.ref.delete());
     await Promise.all(offerDeletePromises);
 
-    // Delete user's notifications
+      // Delete user's notifications
     const notificationsSnapshot = await db.collection('notifications')
       .where('userId', '==', userId)
       .get();
@@ -1719,7 +1719,7 @@ app.delete('/api/admin/users/:userId', async (req, res) => {
     const notificationDeletePromises = notificationsSnapshot.docs.map(doc => doc.ref.delete());
     await Promise.all(notificationDeletePromises);
 
-    // Delete user's email verifications
+        // Delete user's email verifications
     const verificationsSnapshot = await db.collection('email_verifications')
       .where('userId', '==', userId)
       .get();
@@ -1727,7 +1727,7 @@ app.delete('/api/admin/users/:userId', async (req, res) => {
     const verificationDeletePromises = verificationsSnapshot.docs.map(doc => doc.ref.delete());
     await Promise.all(verificationDeletePromises);
 
-    // Finally delete the user
+          // Finally delete the user
     await db.collection('users').doc(userId).delete();
     
             res.json({ message: 'Kullanıcı başarıyla silindi' });

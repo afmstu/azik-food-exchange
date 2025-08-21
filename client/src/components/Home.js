@@ -311,7 +311,16 @@ function Home() {
                 </div>
 
                 <div className="card-actions">
-                  {user && user.id !== listing.userId ? (
+                  {!user ? (
+                    <Link to="/login" className="btn btn-success flex-1">
+                      <MessageSquare size={16} />
+                      Teklif Ver
+                    </Link>
+                  ) : user.id === listing.userId ? (
+                    <span className="text-gray-500 text-sm">
+                      Bu sizin ilanınız
+                    </span>
+                  ) : (
                     <button
                       onClick={() => handleOffer(listing.id)}
                       disabled={offering[listing.id]}
@@ -326,10 +335,6 @@ function Home() {
                         </>
                       )}
                     </button>
-                  ) : (
-                    <span className="text-gray-500 text-sm">
-                      Bu sizin ilanınız
-                    </span>
                   )}
                   
                   <button className="btn btn-secondary">
