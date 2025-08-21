@@ -25,43 +25,44 @@ app.use(express.static(path.join(__dirname, '../client/build')));
 let db = null;
 let isPostgreSQL = false;
 
-if (process.env.DATABASE_URL) {
-  // PostgreSQL for production
-  console.log('=== PostgreSQL Database Initialization ===');
-  console.log('Using PostgreSQL database');
-  console.log('DATABASE_URL length:', process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0);
-  isPostgreSQL = true;
-  
-  try {
-    db = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    });
-    
-    // Test connection
-    db.query('SELECT NOW()', (err, result) => {
-      if (err) {
-        console.error('PostgreSQL connection error:', err);
-        console.error('Error details:', err.message);
-        console.error('Error code:', err.code);
-      } else {
-        console.log('PostgreSQL connected successfully');
-        console.log('Current time from DB:', result.rows[0].now);
-      }
-    });
-  } catch (error) {
-    console.error('Error creating PostgreSQL pool:', error);
-  }
-} else {
+// Temporarily disable PostgreSQL to fix 500 errors
+// if (process.env.DATABASE_URL) {
+//   // PostgreSQL for production
+//   console.log('=== PostgreSQL Database Initialization ===');
+//   console.log('Using PostgreSQL database');
+//   console.log('DATABASE_URL length:', process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0);
+//   isPostgreSQL = true;
+//   
+//   try {
+//     db = new Pool({
+//       connectionString: process.env.DATABASE_URL,
+//       ssl: {
+//         rejectUnauthorized: false
+//       }
+//     });
+//     
+//     // Test connection
+//     db.query('SELECT NOW()', (err, result) => {
+//       if (err) {
+//         console.error('PostgreSQL connection error:', err);
+//         console.error('Error details:', err.message);
+//         console.error('Error code:', err.code);
+//       } else {
+//         console.log('PostgreSQL connected successfully');
+//         console.log('Current time from DB:', result.rows[0].now);
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Error creating PostgreSQL pool:', error);
+//   }
+// } else {
   // SQLite for development
   console.log('=== SQLite Database Initialization ===');
   console.log('Database file path:', './azik.db');
   isPostgreSQL = false;
   
   db = new sqlite3.Database('./azik.db');
-}
+// }
 
 // Database initialization function
 const initializeDatabase = async () => {
