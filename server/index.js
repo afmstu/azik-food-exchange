@@ -3,6 +3,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
@@ -20,127 +21,337 @@ app.use(express.json());
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../client/build')));
 
-// Database setup
-const db = new sqlite3.Database('./azik.db');
+// Database setup - PostgreSQL for production, SQLite for development
+let db = null;
+let isPostgreSQL = false;
 
-console.log('=== Database Initialization ===');
-console.log('Database file path:', './azik.db');
-
-// Create tables
-db.serialize(() => {
-  console.log('Starting database table creation...');
+if (process.env.DATABASE_URL) {
+  // PostgreSQL for production
+  console.log('=== PostgreSQL Database Initialization ===');
+  console.log('Using PostgreSQL database');
+  isPostgreSQL = true;
   
-  // Users table
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    role TEXT NOT NULL,
-    firstName TEXT NOT NULL,
-    lastName TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    phone TEXT NOT NULL UNIQUE,
-    province TEXT NOT NULL,
-    district TEXT NOT NULL,
-    neighborhood TEXT NOT NULL,
-    fullAddress TEXT NOT NULL,
-    password TEXT NOT NULL,
-    fcmToken TEXT,
-    isEmailVerified BOOLEAN DEFAULT 0,
-    isLocked BOOLEAN DEFAULT 0,
-    failedLoginAttempts INTEGER DEFAULT 0,
-    lastFailedLogin DATETIME,
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`, function(err) {
+  db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+  
+  // Test connection
+  db.query('SELECT NOW()', (err, result) => {
     if (err) {
-      console.error('Error creating users table:', err);
+      console.error('PostgreSQL connection error:', err);
     } else {
+      console.log('PostgreSQL connected successfully');
+    }
+  });
+} else {
+  // SQLite for development
+  console.log('=== SQLite Database Initialization ===');
+  console.log('Database file path:', './azik.db');
+  isPostgreSQL = false;
+  
+  db = new sqlite3.Database('./azik.db');
+}
+
+// Database initialization function
+const initializeDatabase = async () => {
+  try {
+    if (isPostgreSQL) {
+      // PostgreSQL table creation
+      console.log('Creating PostgreSQL tables...');
+      
+      // Users table
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          role TEXT NOT NULL,
+          firstName TEXT NOT NULL,
+          lastName TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          phone TEXT NOT NULL UNIQUE,
+          province TEXT NOT NULL,
+          district TEXT NOT NULL,
+          neighborhood TEXT NOT NULL,
+          fullAddress TEXT NOT NULL,
+          password TEXT NOT NULL,
+          fcmToken TEXT,
+          isEmailVerified BOOLEAN DEFAULT FALSE,
+          isLocked BOOLEAN DEFAULT FALSE,
+          failedLoginAttempts INTEGER DEFAULT 0,
+          lastFailedLogin TIMESTAMP,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
       console.log('Users table ready');
-    }
-  });
 
-  // Email verifications table
-  db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
-    id TEXT PRIMARY KEY,
-    userId TEXT NOT NULL,
-    email TEXT NOT NULL,
-    verificationToken TEXT NOT NULL UNIQUE,
-    expiresAt DATETIME NOT NULL,
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
-  )`, function(err) {
-    if (err) {
-      console.error('Error creating email_verifications table:', err);
-    } else {
+      // Email verifications table
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS email_verifications (
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          email TEXT NOT NULL,
+          verificationToken TEXT NOT NULL UNIQUE,
+          expiresAt TIMESTAMP NOT NULL,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        )
+      `);
       console.log('Email verifications table ready');
-    }
-  });
 
-  // Food listings table
-  db.run(`CREATE TABLE IF NOT EXISTS food_listings (
-    id TEXT PRIMARY KEY,
-    userId TEXT NOT NULL,
-    foodName TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
-    details TEXT,
-    startTime TEXT NOT NULL,
-    endTime TEXT NOT NULL,
-    status TEXT DEFAULT 'active',
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (userId) REFERENCES users (id)
-  )`, function(err) {
-    if (err) {
-      console.error('Error creating food_listings table:', err);
-    } else {
+      // Food listings table
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS food_listings (
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          foodName TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          details TEXT,
+          startTime TEXT NOT NULL,
+          endTime TEXT NOT NULL,
+          status TEXT DEFAULT 'active',
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users (id)
+        )
+      `);
       console.log('Food listings table ready');
-    }
-  });
 
-  // Exchange offers table
-  db.run(`CREATE TABLE IF NOT EXISTS exchange_offers (
-    id TEXT PRIMARY KEY,
-    listingId TEXT NOT NULL,
-    offererId TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (listingId) REFERENCES food_listings (id),
-    FOREIGN KEY (offererId) REFERENCES users (id)
-  )`, function(err) {
-    if (err) {
-      console.error('Error creating exchange_offers table:', err);
-    } else {
+      // Exchange offers table
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS exchange_offers (
+          id TEXT PRIMARY KEY,
+          listingId TEXT NOT NULL,
+          offererId TEXT NOT NULL,
+          status TEXT DEFAULT 'pending',
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (listingId) REFERENCES food_listings (id),
+          FOREIGN KEY (offererId) REFERENCES users (id)
+        )
+      `);
       console.log('Exchange offers table ready');
-    }
-  });
 
-  // Notifications table
-  db.run(`CREATE TABLE IF NOT EXISTS notifications (
-    id TEXT PRIMARY KEY,
-    userId TEXT NOT NULL,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    isRead BOOLEAN DEFAULT 0,
-    relatedId TEXT,
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (userId) REFERENCES users (id)
-  )`, function(err) {
-    if (err) {
-      console.error('Error creating notifications table:', err);
-    } else {
+      // Notifications table
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          isRead BOOLEAN DEFAULT FALSE,
+          relatedId TEXT,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users (id)
+        )
+      `);
       console.log('Notifications table ready');
-    }
-  });
-  
-  // Check if database is empty after table creation
-  db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
-    if (err) {
-      console.error('Error checking user count:', err);
+
+      // Check user count
+      const result = await db.query('SELECT COUNT(*) as count FROM users');
+      console.log(`Database initialized with ${result.rows[0].count} existing users`);
+      
     } else {
-      console.log(`Database initialized with ${result.count} existing users`);
+      // SQLite table creation
+      console.log('Creating SQLite tables...');
+      
+      return new Promise((resolve, reject) => {
+        db.serialize(() => {
+          // Users table
+          db.run(`CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            role TEXT NOT NULL,
+            firstName TEXT NOT NULL,
+            lastName TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            phone TEXT NOT NULL UNIQUE,
+            province TEXT NOT NULL,
+            district TEXT NOT NULL,
+            neighborhood TEXT NOT NULL,
+            fullAddress TEXT NOT NULL,
+            password TEXT NOT NULL,
+            fcmToken TEXT,
+            isEmailVerified BOOLEAN DEFAULT 0,
+            isLocked BOOLEAN DEFAULT 0,
+            failedLoginAttempts INTEGER DEFAULT 0,
+            lastFailedLogin DATETIME,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`, function(err) {
+            if (err) {
+              console.error('Error creating users table:', err);
+              reject(err);
+            } else {
+              console.log('Users table ready');
+            }
+          });
+
+          // Email verifications table
+          db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            email TEXT NOT NULL,
+            verificationToken TEXT NOT NULL UNIQUE,
+            expiresAt DATETIME NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+          )`, function(err) {
+            if (err) {
+              console.error('Error creating email_verifications table:', err);
+              reject(err);
+            } else {
+              console.log('Email verifications table ready');
+            }
+          });
+
+          // Food listings table
+          db.run(`CREATE TABLE IF NOT EXISTS food_listings (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            foodName TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            details TEXT,
+            startTime TEXT NOT NULL,
+            endTime TEXT NOT NULL,
+            status TEXT DEFAULT 'active',
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users (id)
+          )`, function(err) {
+            if (err) {
+              console.error('Error creating food_listings table:', err);
+              reject(err);
+            } else {
+              console.log('Food listings table ready');
+            }
+          });
+
+          // Exchange offers table
+          db.run(`CREATE TABLE IF NOT EXISTS exchange_offers (
+            id TEXT PRIMARY KEY,
+            listingId TEXT NOT NULL,
+            offererId TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (listingId) REFERENCES food_listings (id),
+            FOREIGN KEY (offererId) REFERENCES users (id)
+          )`, function(err) {
+            if (err) {
+              console.error('Error creating exchange_offers table:', err);
+              reject(err);
+            } else {
+              console.log('Exchange offers table ready');
+            }
+          });
+
+          // Notifications table
+          db.run(`CREATE TABLE IF NOT EXISTS notifications (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            isRead BOOLEAN DEFAULT 0,
+            relatedId TEXT,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users (id)
+          )`, function(err) {
+            if (err) {
+              console.error('Error creating notifications table:', err);
+              reject(err);
+            } else {
+              console.log('Notifications table ready');
+            }
+          });
+          
+          // Check if database is empty after table creation
+          db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
+            if (err) {
+              console.error('Error checking user count:', err);
+              reject(err);
+            } else {
+              console.log(`Database initialized with ${result.count} existing users`);
+              resolve();
+            }
+          });
+        });
+      });
+    }
+    
+    console.log('Database tables ready!');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    throw error;
+  }
+};
+
+// Initialize database
+initializeDatabase().catch(console.error);
+
+// Helper function for database queries
+const dbQuery = (query, params = []) => {
+  return new Promise((resolve, reject) => {
+    if (isPostgreSQL) {
+      db.query(query, params, (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    } else {
+      db.all(query, params, (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ rows });
+        }
+      });
     }
   });
-  
-  console.log('Database tables ready!');
-});
+};
+
+const dbGet = (query, params = []) => {
+  return new Promise((resolve, reject) => {
+    if (isPostgreSQL) {
+      db.query(query, params, (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result.rows[0] || null);
+        }
+      });
+    } else {
+      db.get(query, params, (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    }
+  });
+};
+
+const dbRun = (query, params = []) => {
+  return new Promise((resolve, reject) => {
+    if (isPostgreSQL) {
+      db.query(query, params, (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    } else {
+      db.run(query, params, function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ lastID: this.lastID, changes: this.changes });
+        }
+      });
+    }
+  });
+};
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'azik-secret-key';
@@ -326,12 +537,16 @@ if (serviceAccount) {
 }
 
 // Helper function to create notifications
-const createNotification = (userId, type, title, message, relatedId = null) => {
+const createNotification = async (userId, type, title, message, relatedId = null) => {
   const notificationId = uuidv4();
-  db.run(
-    'INSERT INTO notifications (id, userId, type, title, message, relatedId) VALUES (?, ?, ?, ?, ?, ?)',
-    [notificationId, userId, type, title, message, relatedId]
-  );
+  try {
+    await dbRun(
+      'INSERT INTO notifications (id, userId, type, title, message, relatedId) VALUES (?, ?, ?, ?, ?, ?)',
+      [notificationId, userId, type, title, message, relatedId]
+    );
+  } catch (error) {
+    console.error('Error creating notification:', error);
+  }
 };
 
 // Helper function to send FCM notification
@@ -344,28 +559,27 @@ const sendFCMNotification = async (userId, title, body, data = {}) => {
     }
 
     // Get user's FCM token
-    db.get('SELECT fcmToken FROM users WHERE id = ?', [userId], async (err, user) => {
-      if (err || !user || !user.fcmToken) {
-        console.log('FCM token not found for user:', userId);
-        return;
-      }
+    const user = await dbGet('SELECT fcmToken FROM users WHERE id = ?', [userId]);
+    if (!user || !user.fcmToken) {
+      console.log('FCM token not found for user:', userId);
+      return;
+    }
 
-      const message = {
-        notification: {
-          title: title,
-          body: body
-        },
-        data: data,
-        token: user.fcmToken
-      };
+    const message = {
+      notification: {
+        title: title,
+        body: body
+      },
+      data: data,
+      token: user.fcmToken
+    };
 
-      try {
-        const response = await admin.messaging().send(message);
-        console.log('FCM notification sent successfully:', response);
-      } catch (error) {
-        console.error('Error sending FCM notification:', error);
-      }
-    });
+    try {
+      const response = await admin.messaging().send(message);
+      console.log('FCM notification sent successfully:', response);
+    } catch (error) {
+      console.error('Error sending FCM notification:', error);
+    }
   } catch (error) {
     console.error('Error in sendFCMNotification:', error);
   }
@@ -414,59 +628,45 @@ app.post('/api/register', async (req, res) => {
     const userId = uuidv4();
 
     // Check if email or phone already exists
-    db.get('SELECT id FROM users WHERE email = ? OR phone = ?', [email, phone], async (err, existingUser) => {
-      if (err) {
-        return res.status(500).json({ error: 'Sunucu hatası' });
-      }
+    const existingUser = await dbGet('SELECT id FROM users WHERE email = ? OR phone = ?', [email, phone]);
+    
+    if (existingUser) {
+      return res.status(400).json({ error: 'Bu e-posta adresi veya telefon numarası zaten kullanılıyor' });
+    }
 
-      if (existingUser) {
-        return res.status(400).json({ error: 'Bu e-posta adresi veya telefon numarası zaten kullanılıyor' });
-      }
+    // Insert user with email verification status
+    await dbRun(
+      'INSERT INTO users (id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, password, isEmailVerified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, hashedPassword, 0]
+    );
 
-      // Insert user with email verification status
-      db.run(
-        'INSERT INTO users (id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, password, isEmailVerified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, hashedPassword, 0],
-        async function(err) {
-          if (err) {
-            return res.status(500).json({ error: 'Kayıt oluşturulamadı' });
-          }
+    // Create verification token
+    const verificationToken = uuidv4();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-          // Create verification token
-          const verificationToken = uuidv4();
-          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // Insert verification record
+    await dbRun(
+      'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
+      [uuidv4(), userId, email, verificationToken, expiresAt.toISOString()]
+    );
 
-          // Insert verification record
-          db.run(
-            'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
-            [uuidv4(), userId, email, verificationToken, expiresAt.toISOString()],
-            async function(err) {
-              if (err) {
-                console.error('Error creating verification record:', err);
-              }
-
-              // Send verification email
-              const emailSent = await sendVerificationEmail(email, verificationToken);
-              
-              if (emailSent) {
-                res.status(201).json({ 
-                  message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
-                  requiresVerification: true,
-                  user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
-                });
-              } else {
-                res.status(201).json({ 
-                  message: 'Kayıt başarılı! E-posta gönderilemedi, lütfen daha sonra tekrar deneyin.',
-                  requiresVerification: true,
-                  emailSent: false,
-                  user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
-                });
-              }
-            }
-          );
-        }
-      );
-    });
+    // Send verification email
+    const emailSent = await sendVerificationEmail(email, verificationToken);
+    
+    if (emailSent) {
+      res.status(201).json({ 
+        message: 'Kayıt başarılı! E-posta adresinizi doğrulayın.',
+        requiresVerification: true,
+        user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+      });
+    } else {
+      res.status(201).json({ 
+        message: 'Kayıt başarılı! E-posta gönderilemedi, lütfen daha sonra tekrar deneyin.',
+        requiresVerification: true,
+        emailSent: false,
+        user: { id: userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress }
+      });
+    }
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
@@ -474,44 +674,36 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Login
-app.post('/api/login', (req, res) => {
-  const { email, password } = req.body;
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  console.log('=== Login Attempt ===');
-  console.log('Email:', email);
-  console.log('Password provided:', !!password);
+    console.log('=== Login Attempt ===');
+    console.log('Email:', email);
+    console.log('Password provided:', !!password);
 
-  if (!email || !password) {
-    console.log('Login failed: Missing email or password');
-    return res.status(400).json({ error: 'E-posta ve şifre zorunludur' });
-  }
-
-  // Validate email format
-  if (!validateEmail(email)) {
-    console.log('Login failed: Invalid email format');
-    return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
-  }
-
-  console.log('Email format is valid, checking database...');
-
-  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-    if (err) {
-      console.error('Database error during login:', err);
-      return res.status(500).json({ error: 'Sunucu hatası' });
+    if (!email || !password) {
+      console.log('Login failed: Missing email or password');
+      return res.status(400).json({ error: 'E-posta ve şifre zorunludur' });
     }
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      console.log('Login failed: Invalid email format');
+      return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
+    }
+
+    console.log('Email format is valid, checking database...');
+
+    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
 
     if (!user) {
       console.log('Login failed: User not found in database');
       console.log('Attempted email:', email);
       
       // Check if there are any users in the database
-      db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
-        if (err) {
-          console.error('Error checking user count:', err);
-        } else {
-          console.log(`Total users in database: ${result.count}`);
-        }
-      });
+      const result = await dbGet('SELECT COUNT(*) as count FROM users', []);
+      console.log(`Total users in database: ${result.count}`);
       
       return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
     }
@@ -546,41 +738,44 @@ app.post('/api/login', (req, res) => {
         fullAddress: user.fullAddress
       }
     });
-  });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  }
 });
 
 // Update user address
-app.put('/api/user/address', authenticateToken, (req, res) => {
-  const { province, district, neighborhood, fullAddress } = req.body;
-  const userId = req.user.id;
+app.put('/api/user/address', authenticateToken, async (req, res) => {
+  try {
+    const { province, district, neighborhood, fullAddress } = req.body;
+    const userId = req.user.id;
 
-  if (!province || !district || !neighborhood || !fullAddress) {
-    return res.status(400).json({ error: 'Tüm adres alanları zorunludur' });
-  }
-
-  db.run(
-    'UPDATE users SET province = ?, district = ?, neighborhood = ?, fullAddress = ? WHERE id = ?',
-    [province, district, neighborhood, fullAddress, userId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Adres güncellenemedi' });
-      }
-      
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-      }
-
-      res.json({ 
-        message: 'Adres başarıyla güncellendi',
-        user: {
-          province,
-          district,
-          neighborhood,
-          fullAddress
-        }
-      });
+    if (!province || !district || !neighborhood || !fullAddress) {
+      return res.status(400).json({ error: 'Tüm adres alanları zorunludur' });
     }
-  );
+
+    const result = await dbRun(
+      'UPDATE users SET province = ?, district = ?, neighborhood = ?, fullAddress = ? WHERE id = ?',
+      [province, district, neighborhood, fullAddress, userId]
+    );
+    
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    }
+
+    res.json({ 
+      message: 'Adres başarıyla güncellendi',
+      user: {
+        province,
+        district,
+        neighborhood,
+        fullAddress
+      }
+    });
+  } catch (error) {
+    console.error('Address update error:', error);
+    res.status(500).json({ error: 'Adres güncellenemedi' });
+  }
 });
 
 // Email verification endpoint (POST)
@@ -593,60 +788,44 @@ app.post('/api/verify-email', async (req, res) => {
     }
 
     // Find verification record
-    db.get('SELECT * FROM email_verifications WHERE verificationToken = ?', [token], async (err, verification) => {
-      if (err) {
-        return res.status(500).json({ error: 'Sunucu hatası' });
+    const verification = await dbGet('SELECT * FROM email_verifications WHERE verificationToken = ?', [token]);
+
+    if (!verification) {
+      return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
+    }
+
+    // Check if token is expired
+    if (new Date() > new Date(verification.expiresAt)) {
+      return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
+    }
+
+    // Update user email verification status
+    await dbRun('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId]);
+
+    // Delete the verification record
+    await dbRun('DELETE FROM email_verifications WHERE id = ?', [verification.id]);
+
+    // Get user info for token
+    const user = await dbGet('SELECT * FROM users WHERE id = ?', [verification.userId]);
+
+    const jwtToken = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
+    
+    res.json({ 
+      success: true,
+      message: 'E-posta başarıyla doğrulandı',
+      token: jwtToken,
+      user: { 
+        id: user.id, 
+        role: user.role, 
+        firstName: user.firstName, 
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        province: user.province,
+        district: user.district,
+        neighborhood: user.neighborhood,
+        fullAddress: user.fullAddress
       }
-
-      if (!verification) {
-        return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
-      }
-
-      // Check if token is expired
-      if (new Date() > new Date(verification.expiresAt)) {
-        return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
-      }
-
-      // Update user email verification status
-      db.run('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'E-posta doğrulanamadı' });
-        }
-
-        // Delete the verification record
-        db.run('DELETE FROM email_verifications WHERE id = ?', [verification.id], function(err) {
-          if (err) {
-            console.error('Error deleting verification record:', err);
-          }
-
-          // Get user info for token
-          db.get('SELECT * FROM users WHERE id = ?', [verification.userId], (err, user) => {
-            if (err) {
-              return res.status(500).json({ error: 'Kullanıcı bilgileri alınamadı' });
-            }
-
-            const token = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
-            
-            res.json({ 
-              success: true,
-              message: 'E-posta başarıyla doğrulandı',
-              token,
-              user: { 
-                id: user.id, 
-                role: user.role, 
-                firstName: user.firstName, 
-                lastName: user.lastName,
-                email: user.email,
-                phone: user.phone,
-                province: user.province,
-                district: user.district,
-                neighborhood: user.neighborhood,
-                fullAddress: user.fullAddress
-              }
-            });
-          });
-        });
-      });
     });
   } catch (error) {
     console.error('Email verification error:', error);
@@ -664,45 +843,29 @@ app.get('/verify-email', async (req, res) => {
     }
 
     // Find verification record
-    db.get('SELECT * FROM email_verifications WHERE verificationToken = ?', [token], async (err, verification) => {
-      if (err) {
-        return res.status(500).json({ error: 'Sunucu hatası' });
-      }
+    const verification = await dbGet('SELECT * FROM email_verifications WHERE verificationToken = ?', [token]);
 
-      if (!verification) {
-        return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
-      }
+    if (!verification) {
+      return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
+    }
 
-      // Check if token is expired
-      if (new Date() > new Date(verification.expiresAt)) {
-        return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
-      }
+    // Check if token is expired
+    if (new Date() > new Date(verification.expiresAt)) {
+      return res.status(400).json({ error: 'Doğrulama token\'ı süresi dolmuş' });
+    }
 
-      // Update user email verification status
-      db.run('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'E-posta doğrulanamadı' });
-        }
+    // Update user email verification status
+    await dbRun('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId]);
 
-        // Delete the verification record
-        db.run('DELETE FROM email_verifications WHERE id = ?', [verification.id], function(err) {
-          if (err) {
-            console.error('Error deleting verification record:', err);
-          }
+    // Delete the verification record
+    await dbRun('DELETE FROM email_verifications WHERE id = ?', [verification.id]);
 
-          // Get user info for token
-          db.get('SELECT * FROM users WHERE id = ?', [verification.userId], (err, user) => {
-            if (err) {
-              return res.status(500).json({ error: 'Kullanıcı bilgileri alınamadı' });
-            }
+    // Get user info for token
+    const user = await dbGet('SELECT * FROM users WHERE id = ?', [verification.userId]);
 
-            // Redirect to frontend with success message
-            const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verification.verificationToken}&success=true`;
-            res.redirect(redirectUrl);
-          });
-        });
-      });
-    });
+    // Redirect to frontend with success message
+    const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verification.verificationToken}&success=true`;
+    res.redirect(redirectUrl);
   } catch (error) {
     console.error('Email verification error:', error);
     const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?error=server_error`;
@@ -767,51 +930,37 @@ app.post('/api/resend-verification', async (req, res) => {
     }
 
     // Find user
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Sunucu hatası' });
-      }
+    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
 
-      if (!user) {
-        return res.status(404).json({ error: 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı' });
-      }
+    if (!user) {
+      return res.status(404).json({ error: 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı' });
+    }
 
-      if (user.isEmailVerified) {
-        return res.status(400).json({ error: 'Bu e-posta adresi zaten doğrulanmış' });
-      }
+    if (user.isEmailVerified) {
+      return res.status(400).json({ error: 'Bu e-posta adresi zaten doğrulanmış' });
+    }
 
-      // Delete old verification records
-      db.run('DELETE FROM email_verifications WHERE userId = ?', [user.id], function(err) {
-        if (err) {
-          console.error('Error deleting old verification records:', err);
-        }
+    // Delete old verification records
+    await dbRun('DELETE FROM email_verifications WHERE userId = ?', [user.id]);
 
-        // Create new verification token
-        const verificationToken = uuidv4();
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // Create new verification token
+    const verificationToken = uuidv4();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        // Insert new verification record
-        db.run(
-          'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
-          [uuidv4(), user.id, email, verificationToken, expiresAt.toISOString()],
-          async function(err) {
-            if (err) {
-              console.error('Error creating verification record:', err);
-              return res.status(500).json({ error: 'Doğrulama e-postası gönderilemedi' });
-            }
+    // Insert new verification record
+    await dbRun(
+      'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
+      [uuidv4(), user.id, email, verificationToken, expiresAt.toISOString()]
+    );
 
-            // Send verification email
-            const emailSent = await sendVerificationEmail(email, verificationToken);
-            
-            if (emailSent) {
-              res.json({ message: 'Doğrulama e-postası tekrar gönderildi' });
-            } else {
-              res.status(500).json({ error: 'E-posta gönderilemedi' });
-            }
-          }
-        );
-      });
-    });
+    // Send verification email
+    const emailSent = await sendVerificationEmail(email, verificationToken);
+    
+    if (emailSent) {
+      res.json({ message: 'Doğrulama e-postası tekrar gönderildi' });
+    } else {
+      res.status(500).json({ error: 'E-posta gönderilemedi' });
+    }
   } catch (error) {
     console.error('Resend verification error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
@@ -819,69 +968,70 @@ app.post('/api/resend-verification', async (req, res) => {
 });
 
 // Get current user profile
-app.get('/api/user/profile', authenticateToken, (req, res) => {
-  db.get('SELECT id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, createdAt FROM users WHERE id = ?', [req.user.id], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Kullanıcı bilgileri getirilemedi' });
-    }
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await dbGet('SELECT id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, createdAt FROM users WHERE id = ?', [req.user.id]);
 
     if (!user) {
       return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     }
 
     res.json(user);
-  });
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ error: 'Kullanıcı bilgileri getirilemedi' });
+  }
 });
 
 // Save FCM token
-app.post('/api/user/fcm-token', authenticateToken, (req, res) => {
-  const { fcmToken } = req.body;
-  
-  if (!fcmToken) {
-    return res.status(400).json({ error: 'FCM token zorunludur' });
-  }
-
-  db.run('UPDATE users SET fcmToken = ? WHERE id = ?', [fcmToken, req.user.id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'FCM token kaydedilemedi' });
+app.post('/api/user/fcm-token', authenticateToken, async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+    
+    if (!fcmToken) {
+      return res.status(400).json({ error: 'FCM token zorunludur' });
     }
+
+    await dbRun('UPDATE users SET fcmToken = ? WHERE id = ?', [fcmToken, req.user.id]);
     res.json({ message: 'FCM token başarıyla kaydedildi' });
-  });
+  } catch (error) {
+    console.error('FCM token save error:', error);
+    res.status(500).json({ error: 'FCM token kaydedilemedi' });
+  }
 });
 
 // Create food listing
-app.post('/api/listings', authenticateToken, (req, res) => {
-  const { foodName, quantity, details, startTime, endTime } = req.body;
-  const userId = req.user.id;
+app.post('/api/listings', authenticateToken, async (req, res) => {
+  try {
+    const { foodName, quantity, details, startTime, endTime } = req.body;
+    const userId = req.user.id;
 
-  if (!foodName || !quantity || !startTime || !endTime) {
-    return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
-  }
-
-  const listingId = uuidv4();
-
-  db.run(
-    'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [listingId, userId, foodName, quantity, details, startTime, endTime, 'active'],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'İlan oluşturulamadı' });
-      }
-      res.status(201).json({ message: 'İlan başarıyla oluşturuldu', listingId });
+    if (!foodName || !quantity || !startTime || !endTime) {
+      return res.status(400).json({ error: 'Yemek adı, adet ve saat bilgileri zorunludur' });
     }
-  );
+
+    const listingId = uuidv4();
+
+    await dbRun(
+      'INSERT INTO food_listings (id, userId, foodName, quantity, details, startTime, endTime, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [listingId, userId, foodName, quantity, details, startTime, endTime, 'active']
+    );
+    
+    res.status(201).json({ message: 'İlan başarıyla oluşturuldu', listingId });
+  } catch (error) {
+    console.error('Create listing error:', error);
+    res.status(500).json({ error: 'İlan oluşturulamadı' });
+  }
 });
 
 // Delete food listing
-app.delete('/api/listings/:listingId', authenticateToken, (req, res) => {
-  const { listingId } = req.params;
-  const userId = req.user.id;
+app.delete('/api/listings/:listingId', authenticateToken, async (req, res) => {
+  try {
+    const { listingId } = req.params;
+    const userId = req.user.id;
 
-  // Check if listing exists and belongs to user
-  db.get('SELECT * FROM food_listings WHERE id = ?', [listingId], (err, listing) => {
-    if (err) {
-      return res.status(500).json({ error: 'Sunucu hatası' });
-    }
+    // Check if listing exists and belongs to user
+    const listing = await dbGet('SELECT * FROM food_listings WHERE id = ?', [listingId]);
 
     if (!listing) {
       return res.status(404).json({ error: 'İlan bulunamadı' });
@@ -892,65 +1042,64 @@ app.delete('/api/listings/:listingId', authenticateToken, (req, res) => {
     }
 
     // Delete related offers first
-    db.run('DELETE FROM exchange_offers WHERE listingId = ?', [listingId], function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Teklifler silinemedi' });
-      }
+    await dbRun('DELETE FROM exchange_offers WHERE listingId = ?', [listingId]);
 
-      // Delete the listing
-      db.run('DELETE FROM food_listings WHERE id = ?', [listingId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'İlan silinemedi' });
-        }
-        res.json({ message: 'İlan başarıyla silindi' });
-      });
-    });
-  });
+    // Delete the listing
+    await dbRun('DELETE FROM food_listings WHERE id = ?', [listingId]);
+    
+    res.json({ message: 'İlan başarıyla silindi' });
+  } catch (error) {
+    console.error('Delete listing error:', error);
+    res.status(500).json({ error: 'İlan silinemedi' });
+  }
 });
 
 // Get all active listings
-app.get('/api/listings', (req, res) => {
-  const { province, district } = req.query;
-  
-  let query = `
-    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-    FROM food_listings fl
-    JOIN users u ON fl.userId = u.id
-    WHERE fl.status = 'active'
-  `;
-  let params = [];
+app.get('/api/listings', async (req, res) => {
+  try {
+    const { province, district } = req.query;
+    
+    let query = `
+      SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+      FROM food_listings fl
+      JOIN users u ON fl.userId = u.id
+      WHERE fl.status = 'active'
+    `;
+    let params = [];
 
-  if (province) {
-    query += ' AND u.province = ?';
-    params.push(province);
-  }
-  if (district) {
-    query += ' AND u.district = ?';
-    params.push(district);
-  }
-
-  query += ' ORDER BY fl.createdAt DESC';
-
-  db.all(query, params, (err, listings) => {
-    if (err) {
-      return res.status(500).json({ error: 'İlanlar getirilemedi' });
+    if (province) {
+      query += ' AND u.province = ?';
+      params.push(province);
     }
-    res.json(listings);
-  });
+    if (district) {
+      query += ' AND u.district = ?';
+      params.push(district);
+    }
+
+    query += ' ORDER BY fl.createdAt DESC';
+
+    const result = await dbQuery(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get listings error:', error);
+    res.status(500).json({ error: 'İlanlar getirilemedi' });
+  }
 });
 
 // Create exchange offer
-app.post('/api/offers', authenticateToken, (req, res) => {
-  const { listingId } = req.body;
-  const offererId = req.user.id;
+app.post('/api/offers', authenticateToken, async (req, res) => {
+  try {
+    const { listingId } = req.body;
+    const offererId = req.user.id;
 
-  if (!listingId) {
-    return res.status(400).json({ error: 'İlan ID zorunludur' });
-  }
+    if (!listingId) {
+      return res.status(400).json({ error: 'İlan ID zorunludur' });
+    }
 
-  // Check if listing exists and is active
-  db.get('SELECT * FROM food_listings WHERE id = ? AND status = "active"', [listingId], (err, listing) => {
-    if (err || !listing) {
+    // Check if listing exists and is active
+    const listing = await dbGet('SELECT * FROM food_listings WHERE id = ? AND status = "active"', [listingId]);
+    
+    if (!listing) {
       return res.status(404).json({ error: 'İlan bulunamadı' });
     }
 
@@ -959,236 +1108,234 @@ app.post('/api/offers', authenticateToken, (req, res) => {
     }
 
     // Check if user already made an offer
-    db.get('SELECT * FROM exchange_offers WHERE listingId = ? AND offererId = ?', [listingId, offererId], (err, existingOffer) => {
-      if (err) {
-        return res.status(500).json({ error: 'Sunucu hatası' });
-      }
+    const existingOffer = await dbGet('SELECT * FROM exchange_offers WHERE listingId = ? AND offererId = ?', [listingId, offererId]);
+    
+    if (existingOffer) {
+      return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
+    }
 
-      if (existingOffer) {
-        return res.status(400).json({ error: 'Bu ilana zaten teklif verdiniz' });
-      }
+    const offerId = uuidv4();
 
-      const offerId = uuidv4();
-
-      db.run(
-        'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
-        [offerId, listingId, offererId],
-        function(err) {
-          if (err) {
-            return res.status(500).json({ error: 'Teklif oluşturulamadı' });
-          }
-          
-                     // Get offerer details for notification
-           db.get('SELECT firstName, lastName FROM users WHERE id = ?', [offererId], (err, offerer) => {
-             if (!err && offerer) {
-               const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
-               
-               // Create notification for listing owner
-               createNotification(
-                 listing.userId,
-                 'new_offer',
-                 'Yeni Teklif',
-                 notificationMessage,
-                 offerId
-               );
-               
-               // Send FCM notification
-               sendFCMNotification(
-                 listing.userId,
-                 'Yeni Teklif',
-                 notificationMessage,
-                 { type: 'new_offer', offerId: offerId }
-               );
-               
-               // Get listing owner's email for email notification
-               db.get('SELECT email FROM users WHERE id = ?', [listing.userId], async (err, owner) => {
-                 if (!err && owner && owner.email) {
-                   // Send email notification
-                   await sendOfferNotificationEmail(
-                     owner.email,
-                     `${offerer.firstName} ${offerer.lastName}`,
-                     listing.foodName
-                   );
-                 }
-               });
-             }
-           });
-          
-          res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
-        }
+    await dbRun(
+      'INSERT INTO exchange_offers (id, listingId, offererId) VALUES (?, ?, ?)',
+      [offerId, listingId, offererId]
+    );
+    
+    // Get offerer details for notification
+    const offerer = await dbGet('SELECT firstName, lastName FROM users WHERE id = ?', [offererId]);
+    
+    if (offerer) {
+      const notificationMessage = `${offerer.firstName} ${offerer.lastName} ilanınıza teklif verdi`;
+      
+      // Create notification for listing owner
+      await createNotification(
+        listing.userId,
+        'new_offer',
+        'Yeni Teklif',
+        notificationMessage,
+        offerId
       );
-    });
-  });
+      
+      // Send FCM notification
+      await sendFCMNotification(
+        listing.userId,
+        'Yeni Teklif',
+        notificationMessage,
+        { type: 'new_offer', offerId: offerId }
+      );
+      
+      // Get listing owner's email for email notification
+      const owner = await dbGet('SELECT email FROM users WHERE id = ?', [listing.userId]);
+      
+      if (owner && owner.email) {
+        // Send email notification
+        await sendOfferNotificationEmail(
+          owner.email,
+          `${offerer.firstName} ${offerer.lastName}`,
+          listing.foodName
+        );
+      }
+    }
+    
+    res.status(201).json({ message: 'Teklif başarıyla gönderildi', offerId });
+  } catch (error) {
+    console.error('Create offer error:', error);
+    res.status(500).json({ error: 'Teklif oluşturulamadı' });
+  }
 });
 
 // Accept/Reject offer
-app.put('/api/offers/:offerId', authenticateToken, (req, res) => {
-  const { offerId } = req.params;
-  const { status } = req.body; // 'accepted' or 'rejected'
+app.put('/api/offers/:offerId', authenticateToken, async (req, res) => {
+  try {
+    const { offerId } = req.params;
+    const { status } = req.body; // 'accepted' or 'rejected'
 
-  if (!['accepted', 'rejected'].includes(status)) {
-    return res.status(400).json({ error: 'Geçersiz durum' });
-  }
+    if (!['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Geçersiz durum' });
+    }
 
-  db.get('SELECT * FROM exchange_offers WHERE id = ?', [offerId], (err, offer) => {
-    if (err || !offer) {
+    const offer = await dbGet('SELECT * FROM exchange_offers WHERE id = ?', [offerId]);
+    
+    if (!offer) {
       return res.status(404).json({ error: 'Teklif bulunamadı' });
     }
 
     // Get listing details
-    db.get('SELECT * FROM food_listings WHERE id = ?', [offer.listingId], (err, listing) => {
-      if (err || !listing) {
-        return res.status(404).json({ error: 'İlan bulunamadı' });
-      }
+    const listing = await dbGet('SELECT * FROM food_listings WHERE id = ?', [offer.listingId]);
+    
+    if (!listing) {
+      return res.status(404).json({ error: 'İlan bulunamadı' });
+    }
 
-      // Check if user owns the listing
-      if (listing.userId !== req.user.id) {
-        return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
-      }
+    // Check if user owns the listing
+    if (listing.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    }
 
-      db.run('UPDATE exchange_offers SET status = ? WHERE id = ?', [status, offerId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Teklif güncellenemedi' });
-        }
+    await dbRun('UPDATE exchange_offers SET status = ? WHERE id = ?', [status, offerId]);
 
-        if (status === 'accepted') {
-          // Mark listing as completed
-          db.run('UPDATE food_listings SET status = "completed" WHERE id = ?', [offer.listingId]);
+    if (status === 'accepted') {
+      // Mark listing as completed
+      await dbRun('UPDATE food_listings SET status = "completed" WHERE id = ?', [offer.listingId]);
+      
+      // Get user details for notification
+      const offerer = await dbGet('SELECT phone, firstName, lastName, email FROM users WHERE id = ?', [offer.offererId]);
+      
+      if (offerer) {
+        // Get listing owner's phone number
+        const listingOwner = await dbGet('SELECT phone FROM users WHERE id = ?', [req.user.id]);
+        
+        if (listingOwner) {
+          // In a real app, you'd send SMS here
+          console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
           
-                     // Get user details for notification
-           db.get('SELECT phone, firstName, lastName, email FROM users WHERE id = ?', [offer.offererId], (err, offerer) => {
-             if (!err && offerer) {
-               // Get listing owner's phone number
-               db.get('SELECT phone FROM users WHERE id = ?', [req.user.id], (err, listingOwner) => {
-                 if (!err && listingOwner) {
-                   // In a real app, you'd send SMS here
-                   console.log(`SMS to ${offerer.phone}: [${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`);
-                   
-                   const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
-                   
-                   // Create notification for offerer
-                   createNotification(
-                     offer.offererId,
-                     'offer_accepted',
-                     'Teklif Kabul Edildi',
-                     notificationMessage,
-                     offerId
-                   );
-                   
-                   // Send FCM notification
-                   sendFCMNotification(
-                     offer.offererId,
-                     'Teklif Kabul Edildi',
-                     notificationMessage,
-                     { type: 'offer_accepted', offerId: offerId }
-                   );
-                   
-                   // Send email notification
-                   if (offerer.email) {
-                     sendOfferAcceptedEmail(
-                       offerer.email,
-                       `${offerer.firstName} ${offerer.lastName}`,
-                       listing.foodName,
-                       listingOwner.phone
-                     );
-                   }
-                 }
-               });
-             }
-           });
-                 } else {
-           const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
-           
-           // Create notification for rejected offer
-           createNotification(
-             offer.offererId,
-             'offer_rejected',
-             'Teklif Reddedildi',
-             notificationMessage,
-             offerId
-           );
-           
-           // Send FCM notification
-           sendFCMNotification(
-             offer.offererId,
-             'Teklif Reddedildi',
-             notificationMessage,
-             { type: 'offer_rejected', offerId: offerId }
-           );
-           
-           // Get offerer details for email notification
-           db.get('SELECT firstName, lastName, email FROM users WHERE id = ?', [offer.offererId], async (err, offerer) => {
-             if (!err && offerer && offerer.email) {
-               // Send email notification
-               await sendOfferRejectedEmail(
-                 offerer.email,
-                 `${offerer.firstName} ${offerer.lastName}`,
-                 listing.foodName
-               );
-             }
-           });
-         }
+          const notificationMessage = `[${listing.foodName}] teklifiniz kabul edildi. İletişime geçin: ${listingOwner.phone}`;
+          
+          // Create notification for offerer
+          await createNotification(
+            offer.offererId,
+            'offer_accepted',
+            'Teklif Kabul Edildi',
+            notificationMessage,
+            offerId
+          );
+          
+          // Send FCM notification
+          await sendFCMNotification(
+            offer.offererId,
+            'Teklif Kabul Edildi',
+            notificationMessage,
+            { type: 'offer_accepted', offerId: offerId }
+          );
+          
+          // Send email notification
+          if (offerer.email) {
+            await sendOfferAcceptedEmail(
+              offerer.email,
+              `${offerer.firstName} ${offerer.lastName}`,
+              listing.foodName,
+              listingOwner.phone
+            );
+          }
+        }
+      }
+    } else {
+      const notificationMessage = `[${listing.foodName}] teklifiniz reddedildi`;
+      
+      // Create notification for rejected offer
+      await createNotification(
+        offer.offererId,
+        'offer_rejected',
+        'Teklif Reddedildi',
+        notificationMessage,
+        offerId
+      );
+      
+      // Send FCM notification
+      await sendFCMNotification(
+        offer.offererId,
+        'Teklif Reddedildi',
+        notificationMessage,
+        { type: 'offer_rejected', offerId: offerId }
+      );
+      
+      // Get offerer details for email notification
+      const offerer = await dbGet('SELECT firstName, lastName, email FROM users WHERE id = ?', [offer.offererId]);
+      
+      if (offerer && offerer.email) {
+        // Send email notification
+        await sendOfferRejectedEmail(
+          offerer.email,
+          `${offerer.firstName} ${offerer.lastName}`,
+          listing.foodName
+        );
+      }
+    }
 
-        res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
-      });
-    });
-  });
+    res.json({ message: `Teklif ${status === 'accepted' ? 'kabul edildi' : 'reddedildi'}` });
+  } catch (error) {
+    console.error('Update offer status error:', error);
+    res.status(500).json({ error: 'Teklif güncellenemedi' });
+  }
 });
 
 // Get user's listings
-app.get('/api/my-listings', authenticateToken, (req, res) => {
-  const query = `
-    SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
-    FROM food_listings fl
-    JOIN users u ON fl.userId = u.id
-    WHERE fl.userId = ?
-    ORDER BY fl.createdAt DESC
-  `;
-  
-  db.all(query, [req.user.id], (err, listings) => {
-    if (err) {
-      return res.status(500).json({ error: 'İlanlar getirilemedi' });
-    }
-    res.json(listings);
-  });
+app.get('/api/my-listings', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT fl.*, u.firstName, u.lastName, u.phone, u.province, u.district, u.neighborhood
+      FROM food_listings fl
+      JOIN users u ON fl.userId = u.id
+      WHERE fl.userId = ?
+      ORDER BY fl.createdAt DESC
+    `;
+    
+    const result = await dbQuery(query, [req.user.id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get my listings error:', error);
+    res.status(500).json({ error: 'İlanlar getirilemedi' });
+  }
 });
 
 // Get user's offers
-app.get('/api/my-offers', authenticateToken, (req, res) => {
-  const query = `
-    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
-    FROM exchange_offers eo
-    JOIN food_listings fl ON eo.listingId = fl.id
-    JOIN users u ON fl.userId = u.id
-    WHERE eo.offererId = ?
-    ORDER BY eo.createdAt DESC
-  `;
-  
-  db.all(query, [req.user.id], (err, offers) => {
-    if (err) {
-      return res.status(500).json({ error: 'Teklifler getirilemedi' });
-    }
-    res.json(offers);
-  });
+app.get('/api/my-offers', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
+      FROM exchange_offers eo
+      JOIN food_listings fl ON eo.listingId = fl.id
+      JOIN users u ON fl.userId = u.id
+      WHERE eo.offererId = ?
+      ORDER BY eo.createdAt DESC
+    `;
+    
+    const result = await dbQuery(query, [req.user.id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get my offers error:', error);
+    res.status(500).json({ error: 'Teklifler getirilemedi' });
+  }
 });
 
 // Get offers for user's listings
-app.get('/api/listing-offers', authenticateToken, (req, res) => {
-  const query = `
-    SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
-    FROM exchange_offers eo
-    JOIN food_listings fl ON eo.listingId = fl.id
-    JOIN users u ON eo.offererId = u.id
-    WHERE fl.userId = ?
-    ORDER BY eo.createdAt DESC
-  `;
-   
-  db.all(query, [req.user.id], (err, offers) => {
-    if (err) {
-      return res.status(500).json({ error: 'Teklifler getirilemedi' });
-    }
-    res.json(offers);
-  });
+app.get('/api/listing-offers', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT eo.*, fl.foodName, fl.quantity, fl.details, fl.startTime, fl.endTime, u.firstName, u.lastName, u.phone, u.province, u.district
+      FROM exchange_offers eo
+      JOIN food_listings fl ON eo.listingId = fl.id
+      JOIN users u ON eo.offererId = u.id
+      WHERE fl.userId = ?
+      ORDER BY eo.createdAt DESC
+    `;
+     
+    const result = await dbQuery(query, [req.user.id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get listing offers error:', error);
+    res.status(500).json({ error: 'Teklifler getirilemedi' });
+  }
 });
 
 // Get provinces (mock data)
@@ -1437,140 +1584,124 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
 });
 
 // Get user notifications
-app.get('/api/notifications', authenticateToken, (req, res) => {
-  db.all(
-    'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
-    [req.user.id],
-    (err, notifications) => {
-      if (err) {
-        return res.status(500).json({ error: 'Bildirimler yüklenemedi' });
-      }
-      res.json(notifications);
-    }
-  );
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const result = await dbQuery(
+      'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get notifications error:', error);
+    res.status(500).json({ error: 'Bildirimler yüklenemedi' });
+  }
 });
 
 // Mark notification as read
-app.put('/api/notifications/:notificationId/read', authenticateToken, (req, res) => {
-  const { notificationId } = req.params;
-  
-  db.run(
-    'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
-    [notificationId, req.user.id],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Bildirim güncellenemedi' });
-      }
-      res.json({ message: 'Bildirim okundu olarak işaretlendi' });
-    }
-  );
+app.put('/api/notifications/:notificationId/read', authenticateToken, async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+    
+    await dbRun(
+      'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
+      [notificationId, req.user.id]
+    );
+    res.json({ message: 'Bildirim okundu olarak işaretlendi' });
+  } catch (error) {
+    console.error('Mark notification read error:', error);
+    res.status(500).json({ error: 'Bildirim güncellenemedi' });
+  }
 });
 
 // Get unread notification count
-app.get('/api/notifications/unread-count', authenticateToken, (req, res) => {
-  db.get(
-    'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = 0',
-    [req.user.id],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: 'Bildirim sayısı alınamadı' });
-      }
-      res.json({ count: result.count });
-    }
-  );
+app.get('/api/notifications/unread-count', authenticateToken, async (req, res) => {
+  try {
+    const result = await dbGet(
+      'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = 0',
+      [req.user.id]
+    );
+    res.json({ count: result.count });
+  } catch (error) {
+    console.error('Get unread count error:', error);
+    res.status(500).json({ error: 'Bildirim sayısı alınamadı' });
+  }
 });
 
 // Admin endpoints
 // Get all users (admin only)
-app.get('/api/admin/users', (req, res) => {
-  // Check for admin credentials in URL parameters
-  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
-  const email = urlParams.get('email');
-  const password = urlParams.get('password');
-  
-  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-  const ADMIN_PASSWORD = 'mF3z4Vsf.';
-  
-  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ error: 'Admin yetkisi gerekli' });
-  }
-
-  db.all(
-    'SELECT id, firstName, lastName, email, phone, role, province, district, neighborhood, isEmailVerified, createdAt FROM users ORDER BY createdAt DESC',
-    (err, users) => {
-      if (err) {
-        return res.status(500).json({ error: 'Kullanıcılar getirilemedi' });
-      }
-      res.json(users);
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    // Check for admin credentials in URL parameters
+    const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+    const email = urlParams.get('email');
+    const password = urlParams.get('password');
+    
+    const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+    const ADMIN_PASSWORD = 'mF3z4Vsf.';
+    
+    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      return res.status(403).json({ error: 'Admin yetkisi gerekli' });
     }
-  );
+
+    const result = await dbQuery(
+      'SELECT id, firstName, lastName, email, phone, role, province, district, neighborhood, isEmailVerified, createdAt FROM users ORDER BY createdAt DESC'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get admin users error:', error);
+    res.status(500).json({ error: 'Kullanıcılar getirilemedi' });
+  }
 });
 
 // Delete user (admin only)
-app.delete('/api/admin/users/:userId', (req, res) => {
-  const { userId } = req.params;
-  
-  // Check for admin credentials in URL parameters
-  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
-  const email = urlParams.get('email');
-  const password = urlParams.get('password');
-  
-  const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
-  const ADMIN_PASSWORD = 'mF3z4Vsf.';
-  
-  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ error: 'Admin yetkisi gerekli' });
-  }
-
-  // Delete user's listings first
-  db.run('DELETE FROM food_listings WHERE userId = ?', [userId], function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Kullanıcı ilanları silinemedi' });
+app.delete('/api/admin/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Check for admin credentials in URL parameters
+    const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+    const email = urlParams.get('email');
+    const password = urlParams.get('password');
+    
+    const ADMIN_EMAIL = 'mustafaozkoca1@gmail.com';
+    const ADMIN_PASSWORD = 'mF3z4Vsf.';
+    
+    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      return res.status(403).json({ error: 'Admin yetkisi gerekli' });
     }
 
+    // Delete user's listings first
+    await dbRun('DELETE FROM food_listings WHERE userId = ?', [userId]);
+
     // Delete user's offers
-    db.run('DELETE FROM exchange_offers WHERE offererId = ?', [userId], function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Kullanıcı teklifleri silinemedi' });
-      }
+    await dbRun('DELETE FROM exchange_offers WHERE offererId = ?', [userId]);
 
-      // Delete user's notifications
-      db.run('DELETE FROM notifications WHERE userId = ?', [userId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Kullanıcı bildirimleri silinemedi' });
-        }
+    // Delete user's notifications
+    await dbRun('DELETE FROM notifications WHERE userId = ?', [userId]);
 
-        // Delete user's email verifications
-        db.run('DELETE FROM email_verifications WHERE userId = ?', [userId], function(err) {
-          if (err) {
-            return res.status(500).json({ error: 'Kullanıcı e-posta doğrulamaları silinemedi' });
-          }
+    // Delete user's email verifications
+    await dbRun('DELETE FROM email_verifications WHERE userId = ?', [userId]);
 
-          // Finally delete the user
-          db.run('DELETE FROM users WHERE id = ?', [userId], function(err) {
-            if (err) {
-              return res.status(500).json({ error: 'Kullanıcı silinemedi' });
-            }
-            res.json({ message: 'Kullanıcı başarıyla silindi' });
-          });
-        });
-      });
-    });
-  });
+    // Finally delete the user
+    await dbRun('DELETE FROM users WHERE id = ?', [userId]);
+    
+    res.json({ message: 'Kullanıcı başarıyla silindi' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Kullanıcı silinemedi' });
+  }
 });
 
 // Debug token endpoint (for troubleshooting)
-app.get('/api/debug-token/:token', (req, res) => {
-  const { token } = req.params;
-  
-  if (!token) {
-    return res.status(400).json({ error: 'Token gerekli' });
-  }
-
-  db.get('SELECT * FROM email_verifications WHERE verificationToken = ?', [token], (err, verification) => {
-    if (err) {
-      return res.status(500).json({ error: 'Veritabanı hatası', details: err.message });
+app.get('/api/debug-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Token gerekli' });
     }
+
+    const verification = await dbGet('SELECT * FROM email_verifications WHERE verificationToken = ?', [token]);
 
     if (!verification) {
       return res.json({ 
@@ -1593,7 +1724,10 @@ app.get('/api/debug-token/:token', (req, res) => {
       isExpired: isExpired,
       timeLeft: isExpired ? 'Süresi dolmuş' : `${Math.floor((expiresAt - now) / (1000 * 60 * 60))} saat kaldı`
     });
-  });
+  } catch (error) {
+    console.error('Debug token error:', error);
+    res.status(500).json({ error: 'Veritabanı hatası', details: error.message });
+  }
 });
 
 // Catch all handler: send back React's index.html file for any non-API routes
