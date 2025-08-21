@@ -631,10 +631,8 @@ app.get('/verify-email', async (req, res) => {
               return res.status(500).json({ error: 'Kullanıcı bilgileri alınamadı' });
             }
 
-            const token = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
-            
             // Redirect to frontend with success message
-            const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${token}&success=true`;
+            const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verification.verificationToken}&success=true`;
             res.redirect(redirectUrl);
           });
         });
