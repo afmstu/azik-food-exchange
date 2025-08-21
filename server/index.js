@@ -641,7 +641,7 @@ app.get('/verify-email', async (req, res) => {
     const user = await dbGet('users', verification.userId);
 
     // Redirect to frontend with success message
-    const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verification.verificationToken}&success=true`;
+    const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?success=true`;
     res.redirect(redirectUrl);
   } catch (error) {
     console.error('Email verification error:', error);
