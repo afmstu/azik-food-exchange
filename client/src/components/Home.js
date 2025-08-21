@@ -293,8 +293,20 @@ function Home() {
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-gray-600">
                       <MapPin size={16} />
-                      <span>{listing.province}, {listing.district}</span>
+                      <span>
+                        {listing.province}, {listing.district}
+                        {listing.neighborhood && `, ${listing.neighborhood}`}
+                      </span>
                     </div>
+                    
+                    {listing.fullAddress && (
+                      <div className="flex items-start gap-2 text-gray-600">
+                        <MapPin size={16} className="mt-0.5 flex-shrink-0" />
+                        <span className="text-xs leading-relaxed">
+                          {listing.fullAddress}
+                        </span>
+                      </div>
+                    )}
                     
                     <div className="flex items-center gap-2 text-gray-600">
                       <Clock size={16} />
