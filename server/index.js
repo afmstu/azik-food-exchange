@@ -214,7 +214,7 @@ const sendVerificationEmail = async (email, verificationToken) => {
   console.log('Verification URL:', verificationUrl);
   
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: process.env.EMAIL_FROM || '"Azık Platformu" <noreply@azik.com>',
     to: email,
     subject: 'Azık - E-posta Doğrulama',
     html: `
@@ -668,14 +668,13 @@ app.post('/api/test-email', async (req, res) => {
     }
 
     const testMailOptions = {
-      from: process.env.EMAIL_USER,
+      from: process.env.EMAIL_FROM || '"Azık Platformu" <noreply@azik.com>',
       to: email,
       subject: 'Azık - Test E-postası',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Test E-postası</h2>
           <p>Bu bir test e-postasıdır. E-posta servisi çalışıyor.</p>
-          <p>Gönderen: ${process.env.EMAIL_USER}</p>
           <p>Alıcı: ${email}</p>
           <p>Tarih: ${new Date().toLocaleString('tr-TR')}</p>
         </div>
