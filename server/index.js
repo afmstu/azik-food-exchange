@@ -23,8 +23,13 @@ app.use(express.static(path.join(__dirname, '../client/build')));
 // Database setup
 const db = new sqlite3.Database('./azik.db');
 
+console.log('=== Database Initialization ===');
+console.log('Database file path:', './azik.db');
+
 // Create tables
 db.serialize(() => {
+  console.log('Starting database table creation...');
+  
   // Users table
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -44,7 +49,13 @@ db.serialize(() => {
     failedLoginAttempts INTEGER DEFAULT 0,
     lastFailedLogin DATETIME,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  )`, function(err) {
+    if (err) {
+      console.error('Error creating users table:', err);
+    } else {
+      console.log('Users table ready');
+    }
+  });
 
   // Email verifications table
   db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
@@ -55,7 +66,13 @@ db.serialize(() => {
     expiresAt DATETIME NOT NULL,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
-  )`);
+  )`, function(err) {
+    if (err) {
+      console.error('Error creating email_verifications table:', err);
+    } else {
+      console.log('Email verifications table ready');
+    }
+  });
 
   // Food listings table
   db.run(`CREATE TABLE IF NOT EXISTS food_listings (
@@ -69,7 +86,13 @@ db.serialize(() => {
     status TEXT DEFAULT 'active',
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users (id)
-  )`);
+  )`, function(err) {
+    if (err) {
+      console.error('Error creating food_listings table:', err);
+    } else {
+      console.log('Food listings table ready');
+    }
+  });
 
   // Exchange offers table
   db.run(`CREATE TABLE IF NOT EXISTS exchange_offers (
@@ -80,7 +103,13 @@ db.serialize(() => {
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (listingId) REFERENCES food_listings (id),
     FOREIGN KEY (offererId) REFERENCES users (id)
-  )`);
+  )`, function(err) {
+    if (err) {
+      console.error('Error creating exchange_offers table:', err);
+    } else {
+      console.log('Exchange offers table ready');
+    }
+  });
 
   // Notifications table
   db.run(`CREATE TABLE IF NOT EXISTS notifications (
@@ -93,7 +122,22 @@ db.serialize(() => {
     relatedId TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users (id)
-  )`);
+  )`, function(err) {
+    if (err) {
+      console.error('Error creating notifications table:', err);
+    } else {
+      console.log('Notifications table ready');
+    }
+  });
+  
+  // Check if database is empty after table creation
+  db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
+    if (err) {
+      console.error('Error checking user count:', err);
+    } else {
+      console.log(`Database initialized with ${result.count} existing users`);
+    }
+  });
   
   console.log('Database tables ready!');
 });
@@ -433,21 +477,42 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
 
+  console.log('=== Login Attempt ===');
+  console.log('Email:', email);
+  console.log('Password provided:', !!password);
+
   if (!email || !password) {
+    console.log('Login failed: Missing email or password');
     return res.status(400).json({ error: 'E-posta ve şifre zorunludur' });
   }
 
   // Validate email format
   if (!validateEmail(email)) {
+    console.log('Login failed: Invalid email format');
     return res.status(400).json({ error: 'Geçersiz e-posta formatı' });
   }
 
+  console.log('Email format is valid, checking database...');
+
   db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
     if (err) {
+      console.error('Database error during login:', err);
       return res.status(500).json({ error: 'Sunucu hatası' });
     }
 
     if (!user) {
+      console.log('Login failed: User not found in database');
+      console.log('Attempted email:', email);
+      
+      // Check if there are any users in the database
+      db.get('SELECT COUNT(*) as count FROM users', [], (err, result) => {
+        if (err) {
+          console.error('Error checking user count:', err);
+        } else {
+          console.log(`Total users in database: ${result.count}`);
+        }
+      });
+      
       return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
     }
 
