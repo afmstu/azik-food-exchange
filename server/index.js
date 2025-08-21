@@ -144,6 +144,15 @@ const dbRun = async (collection, data, id = null) => {
   }
 };
 
+const dbUpdate = async (collection, id, data) => {
+  try {
+    await db.collection(collection).doc(id).update(data);
+    return { lastID: id, changes: 1 };
+  } catch (error) {
+    throw error;
+  }
+};
+
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'azik-secret-key';
 
@@ -562,15 +571,13 @@ app.put('/api/user/address', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Tüm adres alanları zorunludur' });
   }
 
-    const userData = {
+    await dbUpdate('users', userId, {
       province,
       district,
       neighborhood,
       fullAddress,
       updatedAt: new Date().toISOString()
-    };
-    
-    await dbRun('users', userData, userId);
+    });
 
       res.json({ 
         message: 'Adres başarıyla güncellendi',
@@ -609,7 +616,7 @@ app.post('/api/verify-email', async (req, res) => {
       }
 
       // Update user email verification status
-    await dbRun('users', { isEmailVerified: true, updatedAt: new Date().toISOString() }, verification.userId);
+    await dbUpdate('users', verification.userId, { isEmailVerified: true, updatedAt: new Date().toISOString() });
 
         // Delete the verification record
     await db.collection('email_verifications').doc(verification.id).delete();
@@ -677,7 +684,7 @@ app.get('/api/verify-email', async (req, res) => {
 
     // Update user email verification status
     console.log('🔄 Updating user verification status...');
-    await dbRun('users', { isEmailVerified: true, updatedAt: new Date().toISOString() }, verification.userId);
+    await dbUpdate('users', verification.userId, { isEmailVerified: true, updatedAt: new Date().toISOString() });
     console.log('✅ User verification status updated');
 
     // Delete the verification record
