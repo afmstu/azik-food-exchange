@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -82,7 +82,17 @@ function Home() {
     }
   };
 
-  const handleFilterChange = (e) => {
+  // Memoize expensive calculations
+  const filteredListings = useMemo(() => {
+    return listings.filter(listing => {
+      if (filters.province && listing.province !== filters.province) return false;
+      if (filters.district && listing.district !== filters.district) return false;
+      return true;
+    });
+  }, [listings, filters]);
+
+  // Memoize callback functions
+  const handleFilterChange = useCallback((e) => {
     const { name, value } = e.target;
     setFilters(prev => ({ ...prev, [name]: value }));
 
@@ -90,25 +100,27 @@ function Home() {
       fetchDistricts(value);
       setFilters(prev => ({ ...prev, district: '' }));
     }
-  };
+  }, []);
 
-  const handleOffer = async (listingId) => {
+  const handleOffer = useCallback(async (listingId) => {
     if (!user) {
       toast.error('Teklif vermek için giriş yapmalısınız');
       return;
     }
 
+    if (offering[listingId]) return;
+
     try {
       setOffering(prev => ({ ...prev, [listingId]: true }));
       await axios.post('/api/offers', { listingId });
-      toast.success('Teklif başarıyla gönderildi!');
+      toast.success('Teklif başarıyla gönderildi');
       fetchListings(); // Refresh listings
     } catch (error) {
       toast.error(error.response?.data?.error || 'Teklif gönderilemedi');
     } finally {
       setOffering(prev => ({ ...prev, [listingId]: false }));
     }
-  };
+  }, [user, offering]);
 
   const formatTime = (time) => {
     return time.substring(0, 5);
@@ -238,7 +250,7 @@ function Home() {
           Aktif İlanlar
         </h2>
 
-        {listings.length === 0 ? (
+        {filteredListings.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">
               <Heart size={32} />
@@ -259,7 +271,7 @@ function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map((listing) => (
+            {filteredListings.map((listing) => (
               <div key={listing.id} className="card">
                 <div className="card-header">
                   <div>
@@ -460,4 +472,4 @@ function Home() {
   );
 }
 
-export default Home;
+export default React.memo(Home);

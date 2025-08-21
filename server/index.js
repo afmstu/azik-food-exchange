@@ -14,6 +14,25 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const path = require('path');
 
+// Simple in-memory cache
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCachedData = (key) => {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  return null;
+};
+
+const setCachedData = (key, data) => {
+  cache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+};
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -1301,19 +1320,35 @@ app.get('/api/listing-offers', authenticateToken, async (req, res) => {
   }
 });
 
-// Get provinces (mock data)
+// Get provinces (mock data) with caching
 app.get('/api/provinces', (req, res) => {
+  const cacheKey = 'provinces';
+  const cached = getCachedData(cacheKey);
+  
+  if (cached) {
+    return res.json(cached);
+  }
+  
   const provinces = [
     'İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana', 'Konya', 'Gaziantep',
     'Kayseri', 'Mersin', 'Diyarbakır', 'Samsun', 'Denizli', 'Eskişehir', 'Urfa',
     'Malatya', 'Erzurum', 'Van', 'Batman', 'Elazığ', 'Tokat', 'Sivas', 'Trabzon'
   ];
+  
+  setCachedData(cacheKey, provinces);
   res.json(provinces);
 });
 
-// Get districts by province (mock data)
+// Get districts by province (mock data) with caching
 app.get('/api/districts/:province', (req, res) => {
   const { province } = req.params;
+  const cacheKey = `districts_${province}`;
+  const cached = getCachedData(cacheKey);
+  
+  if (cached) {
+    return res.json(cached);
+  }
+  
   // Mock districts - in real app, this would come from a database
   const districts = {
     'İstanbul': [
@@ -1413,7 +1448,9 @@ app.get('/api/districts/:province', (req, res) => {
     ]
   };
   
-  res.json(districts[province] || []);
+  const result = districts[province] || [];
+  setCachedData(cacheKey, result);
+  res.json(result);
 });
 
 // Get neighborhoods by district (mock data)
@@ -1452,7 +1489,7 @@ app.get('/api/neighborhoods/:province/:district', (req, res) => {
      'İstanbul-Maltepe': ['Maltepe', 'Feyzullah', 'Başıbüyük', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Fındıklı', 'Gülensu', 'İdealtepe', 'Küçükyalı', 'Altayçeşme', 'Bağdat Caddesi', 'Girne', 'Gülsuyu', 'Yalı', 'Aydınevler', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Feyzullah', 'Fındıklı', 'Gülensu', 'Gülsuyu', 'İdealtepe', 'Küçükyalı', 'Yalı', 'Aydınevler', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Feyzullah', 'Fındıklı', 'Gülensu', 'Gülsuyu', 'İdealtepe', 'Küçükyalı', 'Yalı', 'Aydınevler', 'Büyükbakkalköy', 'Cevizli', 'Esenkent', 'Feyzullah', 'Fındıklı', 'Gülensu', 'Gülsuyu', 'İdealtepe', 'Küçükyalı', 'Yalı'],
      
      // İstanbul Mahalleleri - Ataşehir
-     'İstanbul-Ataşehir': ['Ataşehir', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir'],
+     'İstanbul-Ataşehir': ['Ataşehir', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir', 'Aşık Veysel', 'Atatürk', 'Barbaros', 'Esatpaşa', 'Ferhatpaşa', 'Fetih', 'İçerenköy', 'İnönü', 'Kayışdağı', 'Küçükbakkalköy', 'Mevlana', 'Mimarsinan', 'Mustafa Kemal', 'Yenişehir'],
      
      // İstanbul Mahalleleri - Ümraniye
      'İstanbul-Ümraniye': ['Ümraniye', 'Atakent', 'Çakmak', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Tantavi', 'Adem Yavuz', 'Atatürk', 'Esenkent', 'Necip Fazıl', 'Parseller', 'Yenişehir', 'Aşağıdudullu', 'Yukarıdudullu', 'Atakent', 'Çakmak', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Tantavi', 'Adem Yavuz', 'Atatürk', 'Esenkent', 'Necip Fazıl', 'Parseller', 'Yenişehir', 'Aşağıdudullu', 'Yukarıdudullu', 'Atakent', 'Çakmak', 'Esenşehir', 'Esenevler', 'Ihlamurkuyu', 'İnkılap', 'Madenler', 'Mustafa Kemal', 'Namık Kemal', 'Tantavi', 'Adem Yavuz', 'Atatürk', 'Esenkent', 'Necip Fazıl', 'Parseller', 'Yenişehir', 'Aşağıdudullu', 'Yukarıdudullu'],
