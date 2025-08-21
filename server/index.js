@@ -290,10 +290,17 @@ const sendVerificationEmail = async (email, verificationToken) => {
 const createNotification = async (userId, type, title, message, relatedId = null) => {
   const notificationId = uuidv4();
   try {
-    await dbRun(
-      'INSERT INTO notifications (id, userId, type, title, message, relatedId) VALUES (?, ?, ?, ?, ?, ?)',
-      [notificationId, userId, type, title, message, relatedId]
-    );
+    const notificationData = {
+      id: notificationId,
+      userId,
+      type,
+      title,
+      message,
+      relatedId,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+    await dbRun('notifications', notificationData, notificationId);
   } catch (error) {
     console.error('Error creating notification:', error);
   }
@@ -378,27 +385,46 @@ app.post('/api/register', async (req, res) => {
     const userId = uuidv4();
 
     // Check if email or phone already exists
-    const existingUser = await dbGet('SELECT id FROM users WHERE email = ? OR phone = ?', [email, phone]);
+    const existingUser = await dbGet('users', null, { email: email }) || await dbGet('users', null, { phone: phone });
     
     if (existingUser) {
       return res.status(400).json({ error: 'Bu e-posta adresi veya telefon numarası zaten kullanılıyor' });
     }
 
     // Insert user with email verification status
-    await dbRun(
-      'INSERT INTO users (id, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, password, isEmailVerified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, role, firstName, lastName, email, phone, province, district, neighborhood, fullAddress, hashedPassword, 0]
-    );
+    const userData = {
+      id: userId,
+      role,
+      firstName,
+      lastName,
+      email,
+      phone,
+      province,
+      district,
+      neighborhood,
+      fullAddress,
+      password: hashedPassword,
+      isEmailVerified: false,
+      createdAt: new Date().toISOString()
+    };
+    
+    await dbRun('users', userData, userId);
 
     // Create verification token
     const verificationToken = uuidv4();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Insert verification record
-    await dbRun(
-      'INSERT INTO email_verifications (id, userId, email, verificationToken, expiresAt) VALUES (?, ?, ?, ?, ?)',
-      [uuidv4(), userId, email, verificationToken, expiresAt.toISOString()]
-    );
+    const verificationData = {
+      id: uuidv4(),
+      userId,
+      email,
+      verificationToken,
+      expiresAt: expiresAt.toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    
+    await dbRun('email_verifications', verificationData);
 
     // Send verification email
     const emailSent = await sendVerificationEmail(email, verificationToken);
@@ -445,15 +471,15 @@ app.post('/api/login', async (req, res) => {
 
     console.log('Email format is valid, checking database...');
 
-    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
+    const user = await dbGet('users', null, { email: email });
 
     if (!user) {
       console.log('Login failed: User not found in database');
       console.log('Attempted email:', email);
       
       // Check if there are any users in the database
-      const result = await dbGet('SELECT COUNT(*) as count FROM users', []);
-      console.log(`Total users in database: ${result.count}`);
+      const usersSnapshot = await db.collection('users').get();
+      console.log(`Total users in database: ${usersSnapshot.size}`);
       
       return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
     }
@@ -504,14 +530,15 @@ app.put('/api/user/address', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Tüm adres alanları zorunludur' });
     }
 
-    const result = await dbRun(
-      'UPDATE users SET province = ?, district = ?, neighborhood = ?, fullAddress = ? WHERE id = ?',
-      [province, district, neighborhood, fullAddress, userId]
-    );
+    const userData = {
+      province,
+      district,
+      neighborhood,
+      fullAddress,
+      updatedAt: new Date().toISOString()
+    };
     
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-    }
+    await dbRun('users', userData, userId);
 
     res.json({ 
       message: 'Adres başarıyla güncellendi',
@@ -538,7 +565,7 @@ app.post('/api/verify-email', async (req, res) => {
     }
 
     // Find verification record
-    const verification = await dbGet('SELECT * FROM email_verifications WHERE verificationToken = ?', [token]);
+    const verification = await dbGet('email_verifications', null, { verificationToken: token });
 
     if (!verification) {
       return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
@@ -550,13 +577,13 @@ app.post('/api/verify-email', async (req, res) => {
     }
 
     // Update user email verification status
-    await dbRun('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId]);
+    await dbRun('users', { isEmailVerified: true, updatedAt: new Date().toISOString() }, verification.userId);
 
     // Delete the verification record
-    await dbRun('DELETE FROM email_verifications WHERE id = ?', [verification.id]);
+    await db.collection('email_verifications').doc(verification.id).delete();
 
     // Get user info for token
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [verification.userId]);
+    const user = await dbGet('users', verification.userId);
 
     const jwtToken = jwt.sign({ id: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName }, JWT_SECRET);
     
@@ -593,7 +620,7 @@ app.get('/verify-email', async (req, res) => {
     }
 
     // Find verification record
-    const verification = await dbGet('SELECT * FROM email_verifications WHERE verificationToken = ?', [token]);
+    const verification = await dbGet('email_verifications', null, { verificationToken: token });
 
     if (!verification) {
       return res.status(400).json({ error: 'Geçersiz doğrulama token\'ı' });
@@ -605,13 +632,13 @@ app.get('/verify-email', async (req, res) => {
     }
 
     // Update user email verification status
-    await dbRun('UPDATE users SET isEmailVerified = 1 WHERE id = ?', [verification.userId]);
+    await dbRun('users', { isEmailVerified: true, updatedAt: new Date().toISOString() }, verification.userId);
 
     // Delete the verification record
-    await dbRun('DELETE FROM email_verifications WHERE id = ?', [verification.id]);
+    await db.collection('email_verifications').doc(verification.id).delete();
 
     // Get user info for token
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [verification.userId]);
+    const user = await dbGet('users', verification.userId);
 
     // Redirect to frontend with success message
     const redirectUrl = `${process.env.FRONTEND_URL || 'https://azik-food-exchange.onrender.com'}/verify-email?token=${verification.verificationToken}&success=true`;
