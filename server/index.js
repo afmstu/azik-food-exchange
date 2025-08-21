@@ -29,23 +29,31 @@ if (process.env.DATABASE_URL) {
   // PostgreSQL for production
   console.log('=== PostgreSQL Database Initialization ===');
   console.log('Using PostgreSQL database');
+  console.log('DATABASE_URL length:', process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0);
   isPostgreSQL = true;
   
-  db = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
-  
-  // Test connection
-  db.query('SELECT NOW()', (err, result) => {
-    if (err) {
-      console.error('PostgreSQL connection error:', err);
-    } else {
-      console.log('PostgreSQL connected successfully');
-    }
-  });
+  try {
+    db = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+    
+    // Test connection
+    db.query('SELECT NOW()', (err, result) => {
+      if (err) {
+        console.error('PostgreSQL connection error:', err);
+        console.error('Error details:', err.message);
+        console.error('Error code:', err.code);
+      } else {
+        console.log('PostgreSQL connected successfully');
+        console.log('Current time from DB:', result.rows[0].now);
+      }
+    });
+  } catch (error) {
+    console.error('Error creating PostgreSQL pool:', error);
+  }
 } else {
   // SQLite for development
   console.log('=== SQLite Database Initialization ===');
@@ -284,7 +292,10 @@ const initializeDatabase = async () => {
 };
 
 // Initialize database
-initializeDatabase().catch(console.error);
+initializeDatabase().catch((error) => {
+  console.error('Database initialization failed:', error);
+  console.error('Error stack:', error.stack);
+});
 
 // Helper function for database queries
 const dbQuery = (query, params = []) => {
