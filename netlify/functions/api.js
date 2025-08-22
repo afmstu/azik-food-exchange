@@ -831,4 +831,57 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Manual notification cleanup endpoint (for testing)
+app.post('/api/admin/cleanup-notifications', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Admin authentication
+    if (email !== 'mustafaozkoca1@gmail.com' || password !== 'mF3z4Vsf.') {
+      return res.status(403).json({ error: 'Admin yetkisi gerekli' });
+    }
+    
+    // 1 gün öncesinin tarihini hesapla
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
+    console.log('Manual cleanup: Deleting notifications older than:', oneDayAgo.toISOString());
+    
+    // 1 günden eski bildirimleri bul
+    const notificationsRef = db.collection('notifications');
+    const snapshot = await notificationsRef
+      .where('createdAt', '<', oneDayAgo.toISOString())
+      .get();
+    
+    if (snapshot.empty) {
+      return res.json({ 
+        message: 'Silinecek eski bildirim bulunamadı',
+        deletedCount: 0 
+      });
+    }
+    
+    // Batch delete işlemi
+    const batch = db.batch();
+    let deletedCount = 0;
+    
+    snapshot.forEach(doc => {
+      batch.delete(doc.ref);
+      deletedCount++;
+    });
+    
+    // Batch'i commit et
+    await batch.commit();
+    
+    res.json({ 
+      message: `${deletedCount} adet eski bildirim başarıyla silindi`,
+      deletedCount: deletedCount,
+      cutoffDate: oneDayAgo.toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Manual cleanup error:', error);
+    res.status(500).json({ error: 'Bildirim temizleme sırasında hata oluştu' });
+  }
+});
+
 module.exports.handler = serverless(app);

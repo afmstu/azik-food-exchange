@@ -23,3 +23,7 @@
 
 [[plugins]]
   package = "@netlify/plugin-functions-install-core"
+
+# Scheduled Functions
+[functions."cleanup-notifications"]
+  schedule = "0 2 * * *"  # Her gün saat 02:00'da çalışır
