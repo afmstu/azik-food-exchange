@@ -195,17 +195,24 @@ const neighborhoods = {
     'Tophane', 'Tünel', 'Yenişehir'
   ],
   'İstanbul-Fatih': [
-    'Sultanahmet', 'Eminönü', 'Beyazıt', 'Laleli', 'Aksaray', 'Vefa', 'Şehzadebaşı',
-    'Saraçhane', 'Karagümrük', 'Fener', 'Balat', 'Ayvansaray', 'Eyüp', 'Gaziosmanpaşa',
-    'Kağıthane', 'Sarıyer', 'Silivri', 'Şile', 'Zeytinburnu', 'Bakırköy', 'Küçükçekmece',
-    'Büyükçekmece', 'Çatalca', 'Esenler', 'Adalar', 'Arnavutköy', 'Bağcılar',
-    'Bahçelievler', 'Bayrampaşa', 'Beykoz', 'Eyüp', 'Gaziosmanpaşa', 'Kağıthane',
-    'Sarıyer', 'Silivri', 'Şile', 'Zeytinburnu'
+    'Aksaray', 'Akşemsettin', 'Alemdar', 'Ali Kuşçu', 'Atikali', 'Ayvansaray', 'Balabanağa',
+    'Balat', 'Beyazıt', 'Binbirdirek', 'Cankurtaran', 'Cerrahpaşa', 'Cibali', 'Demirtaş',
+    'Dervişali', 'Eminönü', 'Eski İmaret', 'Fatih', 'Fener', 'Gedikpaşa', 'Hacı Kadın',
+    'Haseki Sultan', 'Hırka-i Şerif', 'Hobyar', 'Hoca Gıyasettin', 'Hocapaşa', 'İskenderpaşa',
+    'Kalenderhane', 'Karagümrük', 'Katip Kasım', 'Kemalpaşa', 'Küçük Ayasofya', 'Küçük Mustafapaşa',
+    'Küçükkaraman', 'Kumkapı', 'Laleli', 'Mercan', 'Mesihpaşa', 'Mevlanakapı', 'Mimar Hayrettin',
+    'Mimar Kemalettin', 'Molla Fenari', 'Molla Gürani', 'Molla Hüsrev', 'Muhsine Hatun',
+    'Nişanca', 'Rüstempaşa', 'Saraç İshak', 'Saraçhane', 'Sarıdemir', 'Sarıgüzel', 'Sarmaşık',
+    'Seyyid Ömer', 'Silivrikapı', 'Sultan Ahmet', 'Sultan Selim', 'Süleymaniye', 'Şehremini',
+    'Şehsuvar Bey', 'Şehzadebaşı', 'Tahtakale', 'Tayahatun', 'Topkapı', 'Yavuz Sinan',
+    'Yavuz Sultan Selim', 'Yedikule', 'Zeyrek'
   ],
   'İstanbul-Üsküdar': [
-    'Acıbadem', 'Altunizade', 'Bahçelievler', 'Barbaros', 'Beylerbeyi', 'Bulbuldere',
-    'Burhaniye', 'Cumhuriyet', 'Çengelköy', 'Ferah', 'Güzeltepe', 'İcadiye', 'Kandilli',
-    'Kirazlıtepe', 'Kısıklı', 'Küçüksu', 'Küplüce', 'Mimarsinan', 'Muratreis',
+    'Acıbadem', 'Ahmediye', 'Altunizade', 'Aziz Mahmut Hüdayi', 'Bahçelievler', 'Barbaros',
+    'Beylerbeyi', 'Bulgurlu', 'Burhaniye', 'Cumhuriyet', 'Çengelköy', 'Ferah', 'Fetih',
+    'Güzeltepe', 'Hakimiyet-i Milliye', 'Havuzbaşı', 'İcadiye', 'İnkılap', 'Kandilli',
+    'Kirazlıtepe', 'Kısıklı', 'Küçük Çamlıca', 'Küçüksu', 'Küplüce', 'Mekteb-i Osmaniye',
+    'Mimarsinan', 'Muratreis', 'Ortaköy', 'Örnek', 'Paşalimanı', 'Rum Mehmet Paşa',
     'Salacak', 'Selamiali', 'Selimiye', 'Sultantepe', 'Tavusantepe', 'Ünalan',
     'Validei Atik', 'Yavuztürk', 'Zeynep Kamil'
   ],
