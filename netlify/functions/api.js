@@ -416,7 +416,9 @@ app.post('/api/listings', authenticateToken, async (req, res) => {
       neighborhood: neighborhood || null,
       fullAddress: fullAddress || null,
       createdAt: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
+      completedAt: null,
+      acceptedOfferId: null
     };
 
     const result = await dbRun('food_listings', listing);
@@ -449,9 +451,19 @@ app.get('/api/listings', async (req, res) => {
 
 app.get('/api/my-listings', authenticateToken, async (req, res) => {
   try {
-    const listingsSnapshot = await db.collection('food_listings')
-      .where('userId', '==', req.user.id)
-      .get();
+    const { status = 'active' } = req.query; // 'active', 'completed', 'all'
+    
+    let query = db.collection('food_listings').where('userId', '==', req.user.id);
+    
+    // Status filtresi ekle
+    if (status === 'active') {
+      query = query.where('status', '==', 'active');
+    } else if (status === 'completed') {
+      query = query.where('status', '==', 'completed');
+    }
+    // 'all' durumunda filtre ekleme
+
+    const listingsSnapshot = await query.get();
 
     const listings = [];
     listingsSnapshot.forEach(doc => {
@@ -485,6 +497,30 @@ app.delete('/api/listings/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Delete listing error:', error);
     res.status(500).json({ error: 'İlan silinirken hata oluştu' });
+  }
+});
+
+// Completed listings endpoint
+app.get('/api/my-completed-listings', authenticateToken, async (req, res) => {
+  try {
+    const listingsSnapshot = await db.collection('food_listings')
+      .where('userId', '==', req.user.id)
+      .where('status', '==', 'completed')
+      .get();
+
+    const listings = [];
+    listingsSnapshot.forEach(doc => {
+      listings.push({ id: doc.id, ...doc.data() });
+    });
+
+    // Sort by completion date
+    listings.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+    res.json(listings);
+
+  } catch (error) {
+    console.error('Get completed listings error:', error);
+    res.status(500).json({ error: 'Tamamlanan ilanlar yüklenirken hata oluştu' });
   }
 });
 
@@ -630,12 +666,19 @@ app.put('/api/offers/:id/accept', authenticateToken, async (req, res) => {
     // Update offer status
     await dbUpdate('exchange_offers', id, { status: 'accepted' });
 
+    // Update listing status to 'completed' and set completedAt
+    await dbUpdate('food_listings', offer.listingId, { 
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      acceptedOfferId: id
+    });
+
     // Send notification to offerer
     try {
       await createNotification(
         offer.offererId,
         'Teklifiniz Kabul Edildi',
-        `${listing.title} ilanınıza verdiğiniz teklif kabul edildi!`,
+        `${listing.title} ilanına verdiğiniz teklif kabul edildi!`,
         'success'
       );
 
