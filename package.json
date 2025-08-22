@@ -11,6 +11,7 @@
     "install-all": "npm install && cd server && npm install && cd ../client && npm install",
     "vercel-build": "npm run install-all && npm run build",
     "render-build": "cd server && npm install && cd ../client && npm install && npm run build",
+    "netlify-build": "npm run install-all && npm run build",
     "start": "cd server && npm start"
   },
   "keywords": ["food", "exchange", "gıda", "takas"],
