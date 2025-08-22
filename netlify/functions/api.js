@@ -17,20 +17,29 @@ app.use(express.json());
 // Firebase Admin SDK initialization
 let serviceAccount;
 try {
+  console.log('FIREBASE_SERVICE_ACCOUNT length:', process.env.FIREBASE_SERVICE_ACCOUNT?.length);
+  console.log('FIREBASE_SERVICE_ACCOUNT preview:', process.env.FIREBASE_SERVICE_ACCOUNT?.substring(0, 100));
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   console.log('Firebase service account loaded successfully');
 } catch (error) {
   console.error('Firebase service account parsing error:', error);
+  console.error('FIREBASE_SERVICE_ACCOUNT content:', process.env.FIREBASE_SERVICE_ACCOUNT);
   serviceAccount = null;
 }
 
-if (!admin.apps.length && serviceAccount) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log('Firebase Admin SDK initialized');
+if (!admin.apps.length) {
+  if (serviceAccount) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('Firebase Admin SDK initialized with service account');
+  } else {
+    // Fallback: Initialize without service account (for development)
+    admin.initializeApp();
+    console.log('Firebase Admin SDK initialized without service account');
+  }
 } else {
-  console.log('Firebase Admin SDK already initialized or no service account');
+  console.log('Firebase Admin SDK already initialized');
 }
 
 // Debug environment variables
