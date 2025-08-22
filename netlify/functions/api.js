@@ -11,7 +11,15 @@ const admin = require('firebase-admin');
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://takasazik.com',
+    'https://www.takasazik.com',
+    'https://takasaazik.netlify.app',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Firebase Admin SDK initialization
