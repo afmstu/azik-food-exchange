@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import { requestNotificationPermission } from '../firebase';
+import { requestNotificationPermission, logAnalyticsEvent } from '../firebase';
 
 // Axios base URL ayarı - Netlify functions için
 const baseURL = window.REACT_APP_API_URL || 'http://localhost:5000';
@@ -39,6 +39,12 @@ export function AuthProvider({ children }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       setUser(user);
+      
+      // Log login event
+      logAnalyticsEvent('login', {
+        method: 'email',
+        user_id: user.id
+      });
       
       // Request notification permission and save FCM token
       const fcmToken = await requestNotificationPermission();
@@ -84,6 +90,12 @@ export function AuthProvider({ children }) {
       
       setUser(user);
       
+      // Log register event
+      logAnalyticsEvent('sign_up', {
+        method: 'email',
+        user_id: user.id
+      });
+      
       // Request notification permission and save FCM token
       const fcmToken = await requestNotificationPermission();
       if (fcmToken) {
@@ -100,6 +112,13 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    // Log logout event
+    if (user) {
+      logAnalyticsEvent('logout', {
+        user_id: user.id
+      });
+    }
+    
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     delete axios.defaults.headers.common['Authorization'];

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import axios from 'axios';
+import { logAnalyticsEvent } from '../firebase';
 import { 
   Utensils, 
   Hash, 
@@ -54,6 +55,13 @@ function CreateListing() {
 
     try {
       await axios.post('/api/listings', formData);
+      
+      // Log listing creation event
+      logAnalyticsEvent('listing_created', {
+        food_name: formData.foodName,
+        quantity: formData.quantity
+      });
+      
       toast.success('İlan başarıyla oluşturuldu!');
       
       // Reset form

@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getAnalytics, logEvent } from 'firebase/analytics';
 
 // Firebase config - azik-food-exchange projesi için
 const firebaseConfig = {
@@ -14,6 +15,14 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
+
+// Initialize Analytics
+let analytics = null;
+try {
+  analytics = getAnalytics(app);
+} catch (error) {
+  console.log('Analytics not available:', error);
+}
 
 // Request permission and get token
 export const requestNotificationPermission = async () => {
@@ -41,4 +50,15 @@ export const onMessageListener = () => {
   });
 };
 
-export { messaging };
+// Analytics helper functions
+export const logAnalyticsEvent = (eventName, parameters = {}) => {
+  if (analytics) {
+    try {
+      logEvent(analytics, eventName, parameters);
+    } catch (error) {
+      console.log('Analytics event logging failed:', error);
+    }
+  }
+};
+
+export { messaging, analytics };

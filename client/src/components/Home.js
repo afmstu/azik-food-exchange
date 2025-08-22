@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import axios from 'axios';
+import { logAnalyticsEvent } from '../firebase';
 import { 
   Search, 
   Filter, 
@@ -113,6 +114,12 @@ function Home() {
     try {
       setOffering(prev => ({ ...prev, [listingId]: true }));
       await axios.post('/api/offers', { listingId });
+      
+      // Log offer event
+      logAnalyticsEvent('offer_sent', {
+        listing_id: listingId
+      });
+      
       toast.success('Teklif başarıyla gönderildi');
       fetchListings(); // Refresh listings
     } catch (error) {

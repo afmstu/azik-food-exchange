@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
 import Header from './components/Header';
@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import EmailVerification from './components/EmailVerification';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { logAnalyticsEvent } from './firebase';
 
 // Lazy loaded components
 const Home = lazy(() => import('./components/Home'));
@@ -27,10 +28,26 @@ const LoadingSpinner = () => (
   </div>
 );
 
+// Page tracking component
+function PageTracker() {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Log page view
+    logAnalyticsEvent('page_view', {
+      page_title: document.title,
+      page_location: location.pathname
+    });
+  }, [location]);
+  
+  return null;
+}
+
 function App() {
   return (
     <AuthProvider>
       <Router>
+        <PageTracker />
         <div className="App">
           <Toaster position="top-right" />
           <Header />
