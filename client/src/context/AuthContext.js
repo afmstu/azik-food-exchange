@@ -2,6 +2,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { requestNotificationPermission } from '../firebase';
 
+// Axios base URL ayarı
+axios.defaults.baseURL = process.env.NODE_ENV === 'production' 
+  ? 'https://takasaazik.netlify.app' 
+  : 'http://localhost:5000';
+
 const AuthContext = createContext();
 
 export function useAuth() {
