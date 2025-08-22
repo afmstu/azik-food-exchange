@@ -170,34 +170,29 @@ const districts = {
 
 const neighborhoods = {
   'İstanbul-Kadıköy': [
-    'Fenerbahçe', 'Göztepe', 'Eğitim', 'Fikirtepe', 'Hasanpaşa', '19 Mayıs', 'Yenisahra',
-    'Acıbadem', 'Koşuyolu', 'Merdivenköy', 'Bostancı', 'Suadiye', 'Caddebostan', 'Osmanağa',
-    'Rasimpaşa', 'Caferağa', 'Moda', 'Fenerbahçe', 'Göztepe', 'Eğitim', 'Fikirtepe',
-    'Hasanpaşa', '19 Mayıs', 'Yenisahra', 'Acıbadem', 'Koşuyolu', 'Merdivenköy',
-    'Bostancı', 'Suadiye', 'Caddebostan', 'Osmanağa', 'Rasimpaşa', 'Caferağa', 'Moda'
+    '19 Mayıs', 'Acıbadem', 'Bostancı', 'Caddebostan', 'Caferağa', 'Eğitim', 'Fenerbahçe',
+    'Fikirtepe', 'Göztepe', 'Hasanpaşa', 'Koşuyolu', 'Merdivenköy', 'Moda', 'Osmanağa',
+    'Rasimpaşa', 'Suadiye', 'Yenisahra'
   ],
   'İstanbul-Beşiktaş': [
-    'Levent', 'Etiler', 'Gayrettepe', 'Yıldız', 'Ortaköy', 'Bebek', 'Arnavutköy',
-    'Kuruçeşme', 'Rumelihisarı', 'Sarıyer', 'Tarabya', 'Yeniköy', 'İstinye', 'Emirgan',
-    'Baltalimanı', 'Aşiyan', 'Bebek', 'Arnavutköy', 'Kuruçeşme', 'Rumelihisarı',
-    'Vişnezade', 'Sinanpaşa', 'Dikilitaş', 'Beşiktaş', 'Abbasağa', 'Mecidiye',
-    'Muradiye', 'Nispetiye', 'Türkali', 'Cihannüma', 'Gayrettepe', 'Yıldız'
+    'Abbasağa', 'Akat', 'Arnavutköy', 'Aşiyan', 'Bebek', 'Etiler', 'Gayrettepe',
+    'Levent', 'Muradiye', 'Nispetiye', 'Ortaköy', 'Sinanpaşa', 'Türkali', 'Vişnezade',
+    'Yıldız'
   ],
   'İstanbul-Şişli': [
-    'Teşvikiye', 'Nişantaşı', 'Mecidiyeköy', 'Gülbağ', 'Fulya', 'Maslak', 'Ayazağa',
-    'Sarıyer', 'Levent', 'Etiler', 'Gayrettepe', 'Yıldız', 'Ortaköy', 'Bebek',
-    'Arnavutköy', 'Kuruçeşme', 'Rumelihisarı', 'Sarıyer', 'Tarabya', 'Yeniköy',
-    'İstinye', 'Emirgan', 'Baltalimanı', 'Aşiyan', 'Bebek', 'Arnavutköy', 'Kuruçeşme',
-    'Rumelihisarı', 'Vişnezade', 'Sinanpaşa', 'Dikilitaş', 'Beşiktaş', 'Abbasağa',
-    'Mecidiye', 'Muradiye', 'Nispetiye', 'Türkali', 'Cihannüma', 'Gayrettepe', 'Yıldız'
+    '19 Mayıs', 'Ayazağa', 'Bomonti', 'Cumhuriyet', 'Duatepe', 'Ergenekon', 'Esentepe',
+    'Feriköy', 'Fulya', 'Gülbağ', 'Halaskargazi', 'Halide Edip Adıvar', 'Harbiye',
+    'İnönü', 'Kaptanpaşa', 'Kuştepe', 'Mahmut Şevket Paşa', 'Mecidiyeköy', 'Merkez',
+    'Meşrutiyet', 'Nişantaşı', 'Pangaltı', 'Teşvikiye', 'Yayla'
   ],
   'İstanbul-Beyoğlu': [
-    'Taksim', 'Beyoğlu', 'Galata', 'Karaköy', 'Eminönü', 'Sultanahmet', 'Fatih',
-    'Üsküdar', 'Maltepe', 'Kartal', 'Pendik', 'Tuzla', 'Çekmeköy', 'Ümraniye',
-    'Ataşehir', 'Sancaktepe', 'Sultanbeyli', 'Başakşehir', 'Esenyurt', 'Beylikdüzü',
-    'Avcılar', 'Küçükçekmece', 'Sultangazi', 'Büyükçekmece', 'Çatalca', 'Esenler',
-    'Adalar', 'Arnavutköy', 'Bağcılar', 'Bahçelievler', 'Bayrampaşa', 'Beykoz',
-    'Eyüp', 'Gaziosmanpaşa', 'Kağıthane', 'Sarıyer', 'Silivri', 'Şile', 'Zeytinburnu'
+    'Arap Cami', 'Asmalı Mescit', 'Bedrettin', 'Bereketzade', 'Bostan', 'Bülbül',
+    'Camiikebir', 'Çatma Mescit', 'Çukur', 'Emekyemez', 'Evliya Çelebi', 'Fetihtepe',
+    'Firuzağa', 'Gümüşsuyu', 'Hacıahmet', 'Hacımimi', 'Halıcıoğlu', 'Hasköy',
+    'İstiklal', 'Kadımehmet Efendi', 'Kalyoncukulluk', 'Kamerhatun', 'Karaköy',
+    'Kulaksız', 'Kuloğlu', 'Küçük Piyale', 'Müeyyetzade', 'Örnektepe', 'Örnektepe',
+    'Piyalepaşa', 'Pürtelaş', 'Sütlüce', 'Şahkulu', 'Şehit Muhtar', 'Tomtom',
+    'Tophane', 'Tünel', 'Yenişehir'
   ],
   'İstanbul-Fatih': [
     'Sultanahmet', 'Eminönü', 'Beyazıt', 'Laleli', 'Aksaray', 'Vefa', 'Şehzadebaşı',
