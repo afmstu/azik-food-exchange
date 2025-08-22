@@ -17,13 +17,8 @@ app.use(express.json());
 // Firebase Admin SDK initialization
 let serviceAccount;
 try {
-  console.log('FIREBASE_SERVICE_ACCOUNT length:', process.env.FIREBASE_SERVICE_ACCOUNT?.length);
-  console.log('FIREBASE_SERVICE_ACCOUNT preview:', process.env.FIREBASE_SERVICE_ACCOUNT?.substring(0, 100));
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  console.log('Firebase service account loaded successfully');
 } catch (error) {
-  console.error('Firebase service account parsing error:', error);
-  console.error('FIREBASE_SERVICE_ACCOUNT content:', process.env.FIREBASE_SERVICE_ACCOUNT);
   serviceAccount = null;
 }
 
@@ -32,22 +27,11 @@ if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    console.log('Firebase Admin SDK initialized with service account');
   } else {
     // Fallback: Initialize without service account (for development)
     admin.initializeApp();
-    console.log('Firebase Admin SDK initialized without service account');
   }
-} else {
-  console.log('Firebase Admin SDK already initialized');
 }
-
-// Debug environment variables
-console.log('Environment variables check:');
-console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
-console.log('EMAIL_USER exists:', !!process.env.EMAIL_USER);
-console.log('EMAIL_PASS exists:', !!process.env.EMAIL_PASS);
-console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 
 const db = admin.firestore();
 
@@ -453,11 +437,9 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    console.log('Login attempt:', { email: req.body.email, hasPassword: !!req.body.password });
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log('Login failed: missing email or password');
       return res.status(400).json({ error: 'E-posta ve şifre gereklidir' });
     }
 
@@ -1092,7 +1074,7 @@ app.post('/api/admin/cleanup-notifications', async (req, res) => {
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
     
-    console.log('Manual cleanup: Deleting notifications older than:', oneDayAgo.toISOString());
+
     
     // 1 günden eski bildirimleri bul
     const notificationsRef = db.collection('notifications');
