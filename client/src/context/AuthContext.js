@@ -3,9 +3,9 @@ import axios from 'axios';
 import { requestNotificationPermission } from '../firebase';
 
 // Axios base URL ayarı - Netlify functions için
-axios.defaults.baseURL = process.env.NODE_ENV === 'production' 
-  ? 'https://takasaazik.netlify.app/.netlify/functions' 
-  : 'http://localhost:5000';
+const baseURL = window.REACT_APP_API_URL || 'http://localhost:5000';
+console.log('Axios base URL:', baseURL);
+axios.defaults.baseURL = baseURL;
 
 const AuthContext = createContext();
 
