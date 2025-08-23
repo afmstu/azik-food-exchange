@@ -34,20 +34,28 @@ function Login() {
     }
 
     setLoading(true);
-    const result = await login(formData.email, formData.password);
     
-    if (result.requiresVerification) {
-      setShowVerificationMessage(true);
-      setPendingEmail(formData.email);
-      toast.error(result.error);
-    } else if (result.success) {
-      toast.success('Giriş başarılı!');
-      navigate('/');
-    } else {
-      toast.error(result.error);
+    try {
+      const result = await login(formData.email, formData.password);
+      
+      if (result.requiresVerification) {
+        setShowVerificationMessage(true);
+        setPendingEmail(formData.email);
+        toast.error(result.error);
+      } else if (result.success) {
+        // Hızlı yönlendirme - toast'u geciktir
+        navigate('/');
+        setTimeout(() => {
+          toast.success('Giriş başarılı!');
+        }, 100);
+      } else {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      toast.error('Giriş yapılırken bir hata oluştu');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const handleResendVerification = async () => {
@@ -189,10 +197,13 @@ function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-primary w-full"
+            className="btn btn-primary w-full relative"
           >
             {loading ? (
-              <div className="spinner"></div>
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                <span>Giriş yapılıyor...</span>
+              </div>
             ) : (
               <>
                 <LogIn size={16} />

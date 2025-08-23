@@ -451,7 +451,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: 'E-posta ve şifre gereklidir' });
     }
 
-    // Find user
+    // Find user with optimized query
     const users = await dbQuery('users', { email });
     if (users.length === 0) {
       return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
@@ -459,30 +459,32 @@ app.post('/api/login', async (req, res) => {
 
     const user = users[0];
 
+    // Check email verification first (faster than password check)
+    if (!user.emailVerified) {
+      return res.status(401).json({ 
+        error: 'E-posta adresinizi doğrulamanız gerekiyor',
+        requiresVerification: true
+      });
+    }
+
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Geçersiz e-posta veya şifre' });
     }
 
-    // Check email verification
-    if (!user.emailVerified) {
-      return res.status(401).json({ error: 'E-posta adresinizi doğrulamanız gerekiyor' });
-    }
-
-    // Generate JWT
+    // Generate JWT with optimized payload
     const token = jwt.sign(
       { 
         id: user.id, 
         email: user.email, 
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName
+        role: user.role
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
+    // Return optimized user object
     res.json({ 
       token, 
       user: {

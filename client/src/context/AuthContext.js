@@ -6,6 +6,10 @@ import { requestNotificationPermission, logAnalyticsEvent } from '../firebase';
 const baseURL = window.REACT_APP_API_URL || 'http://localhost:5000';
 axios.defaults.baseURL = baseURL;
 
+// Axios timeout ayarları
+axios.defaults.timeout = 10000; // 10 saniye
+axios.defaults.timeoutErrorMessage = 'İstek zaman aşımına uğradı';
+
 const AuthContext = createContext();
 
 export function useAuth() {
@@ -34,23 +38,28 @@ export function AuthProvider({ children }) {
       const response = await axios.post('/api/login', { email, password });
       const { token, user } = response.data;
       
+      // Immediately set user and token for faster UI response
+      setUser(user);
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      setUser(user);
-      
-      // Log login event
+      // Log login event (non-blocking)
       logAnalyticsEvent('login', {
         method: 'email',
         user_id: user.id
       });
       
-      // Request notification permission and save FCM token
-      const fcmToken = await requestNotificationPermission();
-      if (fcmToken) {
-        await axios.post('/api/user/fcm-token', { fcmToken });
-      }
+      // Request notification permission in background (non-blocking)
+      requestNotificationPermission().then(fcmToken => {
+        if (fcmToken) {
+          axios.post('/api/user/fcm-token', { fcmToken }).catch(err => {
+            console.log('FCM token save failed:', err);
+          });
+        }
+      }).catch(err => {
+        console.log('Notification permission failed:', err);
+      });
       
       return { success: true };
     } catch (error) {
