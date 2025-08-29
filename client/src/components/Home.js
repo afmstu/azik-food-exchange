@@ -347,17 +347,7 @@ function Home() {
           )}
         </div>
 
-        {/* Yemek İkonları Animasyonu */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-10 left-10 text-2xl animate-bounce" style={{animationDelay: '0.5s', animationDuration: '2s'}}>🍕</div>
-          <div className="absolute top-20 right-20 text-2xl animate-bounce" style={{animationDelay: '1s', animationDuration: '2.5s'}}>🍔</div>
-          <div className="absolute bottom-20 left-20 text-2xl animate-bounce" style={{animationDelay: '1.5s', animationDuration: '2.2s'}}>🍜</div>
-          <div className="absolute bottom-10 right-10 text-2xl animate-bounce" style={{animationDelay: '2s', animationDuration: '2.8s'}}>🍣</div>
-          <div className="absolute top-1/2 left-5 text-2xl animate-bounce" style={{animationDelay: '0.8s', animationDuration: '2.3s'}}>🥘</div>
-          <div className="absolute top-1/2 right-5 text-2xl animate-bounce" style={{animationDelay: '1.2s', animationDuration: '2.6s'}}>🍖</div>
-          <div className="absolute top-1/3 left-1/4 text-xl animate-bounce" style={{animationDelay: '0.3s', animationDuration: '2.1s'}}>🥗</div>
-          <div className="absolute bottom-1/3 right-1/4 text-xl animate-bounce" style={{animationDelay: '1.8s', animationDuration: '2.4s'}}>🍝</div>
-        </div>
+
       </div>
     );
   }
