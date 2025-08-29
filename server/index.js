@@ -34,7 +34,18 @@ const setCachedData = (key, data) => {
 };
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://takasazik.com',
+    'https://www.takasazik.com',
+    'https://azik-food-exchange.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
 
 // Serve static files from the React app

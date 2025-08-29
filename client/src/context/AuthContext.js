@@ -3,12 +3,33 @@ import axios from 'axios';
 import { requestNotificationPermission, logAnalyticsEvent } from '../firebase';
 
 // Axios base URL ayarı - Netlify functions için
-const baseURL = window.REACT_APP_API_URL || 'http://localhost:5000';
+const baseURL = process.env.NODE_ENV === 'production' 
+  ? 'https://azik-food-exchange.onrender.com'
+  : (window.REACT_APP_API_URL || 'http://localhost:5000');
 axios.defaults.baseURL = baseURL;
 
-// Axios timeout ayarları
-axios.defaults.timeout = 10000; // 10 saniye
+// Axios timeout ayarları - mobil için daha uzun timeout
+axios.defaults.timeout = 30000; // 30 saniye (mobil için)
 axios.defaults.timeoutErrorMessage = 'İstek zaman aşımına uğradı';
+
+// Axios interceptor for retry logic
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Retry logic for network errors
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout') || !error.response) {
+      if (!originalRequest._retry) {
+        originalRequest._retry = true;
+        console.log('Retrying request due to timeout or network error...');
+        return axios(originalRequest);
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 const AuthContext = createContext();
 

@@ -18,8 +18,7 @@ const ListingOffers = lazy(() => import('./components/ListingOffers'));
 const UpdateAddress = lazy(() => import('./components/UpdateAddress'));
 const Admin = lazy(() => import('./components/Admin'));
 
-// Configure axios
-axios.defaults.baseURL = 'http://localhost:5000';
+// Configure axios - baseURL is set in AuthContext.js
 
 // Loading component
 const LoadingSpinner = () => (

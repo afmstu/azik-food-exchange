@@ -35,8 +35,62 @@ function Home() {
   const [showDeveloperLogin, setShowDeveloperLogin] = useState(false);
   const [developerEmail, setDeveloperEmail] = useState('');
   const [developerPassword, setDeveloperPassword] = useState('');
+  const [provincesRetryCount, setProvincesRetryCount] = useState(0);
+  const [listingsRetryCount, setListingsRetryCount] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [networkStatus, setNetworkStatus] = useState('online');
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
   const { user } = useAuth();
+
+  // Loading mesajları
+  const loadingMessages = [
+    "🍳 Yemekler getiriliyor...",
+    "🔍 İlanlar taranıyor...",
+    "🥘 Lezzetli tarifler aranıyor...",
+    "🍽️ Sofralar hazırlanıyor...",
+    "👨‍🍳 Şefler çalışıyor...",
+    "🥄 Karıştırılıyor...",
+    "🔥 Ocaklar yakılıyor...",
+    "🌶️ Baharatlar ekleniyor..."
+  ];
+
+  // Loading mesajlarını döndür
+  useEffect(() => {
+    if (loading) {
+      const interval = setInterval(() => {
+        setLoadingMessageIndex(prev => (prev + 1) % loadingMessages.length);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [loading, loadingMessages.length]);
+
+  // Mobil cihaz kontrolü
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+      setIsMobile(isMobileDevice);
+    };
+    
+    checkMobile();
+  }, []);
+
+  // Network status kontrolü
+  useEffect(() => {
+    const updateNetworkStatus = () => {
+      setNetworkStatus(navigator.onLine ? 'online' : 'offline');
+    };
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    updateNetworkStatus();
+
+    return () => {
+      window.removeEventListener('online', updateNetworkStatus);
+      window.removeEventListener('offline', updateNetworkStatus);
+    };
+  }, []);
 
   useEffect(() => {
     fetchListings();
@@ -44,16 +98,55 @@ function Home() {
   }, [filters]);
 
   const fetchListings = async () => {
+    // Network offline ise API çağrısı yapma
+    if (networkStatus === 'offline') {
+      console.log('Network offline, skipping listings fetch');
+      toast.error('İnternet bağlantısı yok. İlanlar yüklenemedi.');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const params = new URLSearchParams();
       if (filters.province) params.append('province', filters.province);
       if (filters.district) params.append('district', filters.district);
       
+      console.log('Fetching listings from:', axios.defaults.baseURL + '/api/listings?' + params.toString());
+      console.log('Is mobile device:', isMobile);
+      
       const response = await axios.get(`/api/listings?${params.toString()}`);
+      console.log('Listings response count:', response.data.length);
       setListings(response.data);
+      setListingsRetryCount(0); // Başarılı olursa retry sayısını sıfırla
     } catch (error) {
-      toast.error('İlanlar yüklenemedi');
+      console.error('Listings fetch error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status,
+        isMobile: isMobile
+      });
+      
+      // Mobil cihazlarda retry logic
+      if (isMobile && listingsRetryCount < 2) {
+        console.log(`Retrying listings fetch (attempt ${listingsRetryCount + 1})...`);
+        setListingsRetryCount(prev => prev + 1);
+        setTimeout(() => fetchListings(), 2000); // 2 saniye sonra tekrar dene
+        return;
+      }
+      
+      // Daha detaylı hata mesajı
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        toast.error('İlanlar yüklenemedi: Bağlantı zaman aşımı');
+      } else if (error.response?.status === 404) {
+        toast.error('İlanlar yüklenemedi: API endpoint bulunamadı');
+      } else if (error.response?.status >= 500) {
+        toast.error('İlanlar yüklenemedi: Sunucu hatası');
+      } else {
+        toast.error('İlanlar yüklenemedi: ' + (error.response?.data?.error || error.message));
+      }
       setListings([]);
     } finally {
       setLoading(false);
@@ -61,11 +154,49 @@ function Home() {
   };
 
   const fetchProvinces = async () => {
+    // Network offline ise API çağrısı yapma
+    if (networkStatus === 'offline') {
+      console.log('Network offline, skipping provinces fetch');
+      toast.error('İnternet bağlantısı yok. İller yüklenemedi.');
+      return;
+    }
+
     try {
+      console.log('Fetching provinces from:', axios.defaults.baseURL + '/api/provinces');
+      console.log('Is mobile device:', isMobile);
+      
       const response = await axios.get('/api/provinces');
+      console.log('Provinces response:', response.data);
       setProvinces(response.data);
+      setProvincesRetryCount(0); // Başarılı olursa retry sayısını sıfırla
     } catch (error) {
-      toast.error('İller yüklenemedi');
+      console.error('Provinces fetch error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status,
+        isMobile: isMobile
+      });
+      
+      // Mobil cihazlarda retry logic
+      if (isMobile && provincesRetryCount < 2) {
+        console.log(`Retrying provinces fetch (attempt ${provincesRetryCount + 1})...`);
+        setProvincesRetryCount(prev => prev + 1);
+        setTimeout(() => fetchProvinces(), 2000); // 2 saniye sonra tekrar dene
+        return;
+      }
+      
+      // Daha detaylı hata mesajı
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        toast.error('İller yüklenemedi: Bağlantı zaman aşımı');
+      } else if (error.response?.status === 404) {
+        toast.error('İller yüklenemedi: API endpoint bulunamadı');
+      } else if (error.response?.status >= 500) {
+        toast.error('İller yüklenemedi: Sunucu hatası');
+      } else {
+        toast.error('İller yüklenemedi: ' + (error.response?.data?.error || error.message));
+      }
     }
   };
 
@@ -76,10 +207,23 @@ function Home() {
     }
     
     try {
+      console.log('Fetching districts for:', province);
       const response = await axios.get(`/api/districts/${province}`);
+      console.log('Districts response:', response.data);
       setDistricts(response.data);
     } catch (error) {
-      toast.error('İlçeler yüklenemedi');
+      console.error('Districts fetch error:', error);
+      
+      // Daha detaylı hata mesajı
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        toast.error('İlçeler yüklenemedi: Bağlantı zaman aşımı');
+      } else if (error.response?.status === 404) {
+        toast.error('İlçeler yüklenemedi: API endpoint bulunamadı');
+      } else if (error.response?.status >= 500) {
+        toast.error('İlçeler yüklenemedi: Sunucu hatası');
+      } else {
+        toast.error('İlçeler yüklenemedi: ' + (error.response?.data?.error || error.message));
+      }
     }
   };
 
@@ -153,14 +297,146 @@ function Home() {
 
   if (loading) {
     return (
-      <div className="loading">
-        <div className="spinner"></div>
+      <div className="loading min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-yellow-50">
+        {/* Tencere Animasyonu */}
+        <div className="relative mb-8">
+          {/* Tencere */}
+          <div className="w-24 h-20 bg-gradient-to-b from-gray-700 to-gray-800 rounded-full relative overflow-hidden pot-slide">
+            {/* Tencere içi */}
+            <div className="absolute inset-2 bg-gradient-to-b from-orange-200 to-orange-300 rounded-full"></div>
+            
+            {/* Pişen yemek kabarcıkları */}
+            <div className="absolute bottom-2 left-3 w-2 h-2 bg-orange-400 rounded-full cooking-bubble"></div>
+            <div className="absolute bottom-3 right-4 w-1.5 h-1.5 bg-orange-400 rounded-full cooking-bubble" style={{animationDelay: '0.5s'}}></div>
+            <div className="absolute bottom-1 left-1/2 w-1 h-1 bg-orange-400 rounded-full cooking-bubble" style={{animationDelay: '1s'}}></div>
+            
+            {/* Buhar */}
+            <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
+              <div className="w-2 h-4 bg-gray-300 rounded-full steam-rise"></div>
+            </div>
+            <div className="absolute -top-1 left-1/3 transform -translate-x-1/2">
+              <div className="w-1.5 h-3 bg-gray-300 rounded-full steam-rise" style={{animationDelay: '0.5s'}}></div>
+            </div>
+            <div className="absolute -top-1 right-1/3 transform translate-x-1/2">
+              <div className="w-1.5 h-3 bg-gray-300 rounded-full steam-rise" style={{animationDelay: '1s'}}></div>
+            </div>
+          </div>
+          
+          {/* Tencere Kolu */}
+          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-16 h-2 bg-gray-600 rounded-full"></div>
+          
+          {/* Kayma Efekti */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-pulse"></div>
+        </div>
+
+        {/* Dönen Mesajlar */}
+        <div className="text-center">
+          <div className="text-2xl font-bold text-orange-600 mb-4 message-fade">
+            {loadingMessages[loadingMessageIndex]}
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600 rounded-full animate-pulse"></div>
+          </div>
+          
+          {isMobile && (
+            <p className="text-center mt-4 text-gray-600 text-sm">
+              Mobil cihazda yükleniyor... Bu biraz zaman alabilir
+            </p>
+          )}
+        </div>
+
+        {/* Yemek İkonları Animasyonu */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-10 left-10 text-2xl animate-bounce" style={{animationDelay: '0.5s', animationDuration: '2s'}}>🍕</div>
+          <div className="absolute top-20 right-20 text-2xl animate-bounce" style={{animationDelay: '1s', animationDuration: '2.5s'}}>🍔</div>
+          <div className="absolute bottom-20 left-20 text-2xl animate-bounce" style={{animationDelay: '1.5s', animationDuration: '2.2s'}}>🍜</div>
+          <div className="absolute bottom-10 right-10 text-2xl animate-bounce" style={{animationDelay: '2s', animationDuration: '2.8s'}}>🍣</div>
+          <div className="absolute top-1/2 left-5 text-2xl animate-bounce" style={{animationDelay: '0.8s', animationDuration: '2.3s'}}>🥘</div>
+          <div className="absolute top-1/2 right-5 text-2xl animate-bounce" style={{animationDelay: '1.2s', animationDuration: '2.6s'}}>🍖</div>
+          <div className="absolute top-1/3 left-1/4 text-xl animate-bounce" style={{animationDelay: '0.3s', animationDuration: '2.1s'}}>🥗</div>
+          <div className="absolute bottom-1/3 right-1/4 text-xl animate-bounce" style={{animationDelay: '1.8s', animationDuration: '2.4s'}}>🍝</div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="container">
+      {/* Debug Section - sadece development'ta göster */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-gray-800 p-4 rounded-lg mb-4 text-sm">
+          <h3 className="text-white font-bold mb-2">🔧 Debug Bilgileri</h3>
+          <p className="text-gray-300">API URL: {axios.defaults.baseURL}</p>
+          <p className="text-gray-300">Mobil Cihaz: {isMobile ? 'Evet' : 'Hayır'}</p>
+          <p className="text-gray-300">Network: {networkStatus}</p>
+          <p className="text-gray-300">Provinces Count: {provinces.length}</p>
+          <p className="text-gray-300">Listings Count: {listings.length}</p>
+          <p className="text-gray-300">Loading: {loading ? 'Evet' : 'Hayır'}</p>
+          <p className="text-gray-300">Provinces Retry: {provincesRetryCount}</p>
+          <p className="text-gray-300">Listings Retry: {listingsRetryCount}</p>
+          <div className="flex gap-2 mt-2">
+            <button 
+              onClick={() => {
+                console.log('Manual provinces fetch...');
+                fetchProvinces();
+              }}
+              className="bg-blue-500 text-white px-3 py-1 rounded text-xs"
+            >
+              İlleri Yeniden Yükle
+            </button>
+            <button 
+              onClick={() => {
+                console.log('Manual listings fetch...');
+                fetchListings();
+              }}
+              className="bg-green-500 text-white px-3 py-1 rounded text-xs"
+            >
+              İlanları Yeniden Yükle
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Network Status Warning - Mobil için */}
+      {isMobile && networkStatus === 'offline' && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-red-500 rounded-full mr-2"></div>
+            <strong>İnternet Bağlantısı Yok!</strong>
+          </div>
+          <p className="text-sm mt-1">
+            İlanlar ve iller yüklenemiyor. Lütfen internet bağlantınızı kontrol edin.
+          </p>
+        </div>
+      )}
+
+      {/* Mobil için Retry Button - Veri yüklenemezse */}
+      {isMobile && !loading && provinces.length === 0 && listings.length === 0 && networkStatus === 'online' && (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <strong>Veri Yüklenemedi</strong>
+              <p className="text-sm mt-1">
+                İlanlar ve iller yüklenemedi. Tekrar denemek için butona tıklayın.
+              </p>
+            </div>
+            <button 
+              onClick={() => {
+                setProvincesRetryCount(0);
+                setListingsRetryCount(0);
+                fetchProvinces();
+                fetchListings();
+              }}
+              className="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600"
+            >
+              Tekrar Dene
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       {!user && (
         <div className="hero-section">

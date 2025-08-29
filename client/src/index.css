@@ -5,6 +5,84 @@
   box-sizing: border-box;
 }
 
+/* Custom Animations for Cooking Theme */
+@keyframes potSlide {
+  0% {
+    transform: translateX(-100%) rotate(-5deg);
+  }
+  50% {
+    transform: translateX(0%) rotate(0deg);
+  }
+  100% {
+    transform: translateX(100%) rotate(5deg);
+  }
+}
+
+@keyframes steamRise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.5);
+  }
+}
+
+@keyframes cookingBubble {
+  0% {
+    transform: scale(0) translateY(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1) translateY(-5px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) translateY(-10px);
+    opacity: 0;
+  }
+}
+
+@keyframes messageFade {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.pot-slide {
+  animation: potSlide 3s ease-in-out infinite;
+}
+
+.steam-rise {
+  animation: steamRise 2s ease-out infinite;
+}
+
+.cooking-bubble {
+  animation: cookingBubble 1.5s ease-out infinite;
+}
+
+.message-fade {
+  animation: messageFade 4s ease-in-out infinite;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   background: linear-gradient(135deg, #ff9a56 0%, #ffd93d 50%, #ff6b35 100%);
